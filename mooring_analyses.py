@@ -1,17 +1,22 @@
-# Rowan Brown, 12.12.2024
+# Rowan Brown, 13.12.2024
 # Munich, Germany
 
 import xarray as xr 
 import pandas as pd
 from datetime import datetime, timedelta
+import scipy.io as spio
 
-def open_dat_file(itp):
-    """Opens level 3 pressure-bin-averaged data at 1-db vertical resolution.
-    All ITPs should have associated .dat files, so this function /should/ be quite easy to use.
-    ITP132 doesn't have salinities in the cleaned .mat file due to a bad sensor; hopefully what good data exist are here instead."""
+def open_mooring_data():
+    """Opens data from the Weddell Sea mooring."""
 
-    with open('../filepaths/itp_filepath') as f: dirpath = f.readlines()[0][:-1] # the [0] accesses the first line, and the [:-1] removes the newline tag
-    filepath = dirpath+str(itp)+'/itp'+str(itp)+'grddata/itp'+str(itp)+'grd0694.dat'             # filepath to the processed data mat file
+    with open('../filepaths/mooring_filepath') as f: dirpath = f.readlines()[0][:-1] # the [0] accesses the first line, and the [:-1] removes the newline tag
+    filepath = dirpath + '/CTD/dPS129_072_01.mat'
+    mat = spio.loadmat(filepath)
+    print(mat)
+    quit()
+
+
+    dirpath+str(itp)+'/itp'+str(itp)+'grddata/itp'+str(itp)+'grd0694.dat'             # filepath to the processed data mat file
     locpd = pd.read_csv(filepath, sep='\s+', nrows=2, engine='python')
     datapd = pd.read_csv(filepath, sep='\s+', skiprows=2, skipfooter=1, engine='python')
     lon = locpd.iloc[0,2]
@@ -42,7 +47,7 @@ def open_dat_file(itp):
             attrs=dict(description='Test desc.'),
         )
     print(ds)
-
+    '''
+    
 if __name__=="__main__":
-    itp = 132
-    open_dat_file(itp)
+    open_mooring_data()
