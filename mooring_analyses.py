@@ -76,6 +76,7 @@ def open_mooring_ml_data():
 
     return ds
 
+# plotting temperature
 def temp_hovm(ds):
     """Created a Hovmöller plot of temperature."""
     f, ax = plt.subplots(figsize=(4, 3))
@@ -85,6 +86,7 @@ def temp_hovm(ds):
     ax.set_title('Temperature at the Weddell Sea mooring')
     plt.savefig('Temperature.png',bbox_inches='tight',dpi=450)
 
+# plotting temperature
 def sal_hovm(ds):
     """Created a Hovmöller plot of salinity."""
     f, ax = plt.subplots(figsize=(4, 3))
