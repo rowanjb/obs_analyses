@@ -79,22 +79,28 @@ def open_mooring_ml_data():
 # plotting temperature
 def temp_hovm(ds):
     """Created a Hovmöller plot of temperature."""
+    plt.rcParams["font.family"] = "serif" # change the base font
     f, ax = plt.subplots(figsize=(4, 3))
     ds.T.sel(depth=[-50,-135,-220]).plot.contourf('day','depth',ax=ax,levels=20,cbar_kwargs={'label': 'Temperature ($\degree C$)'})
-    ax.set_ylabel('Depth ($m$)')
-    ax.set_xlabel('Date')
-    ax.set_title('Temperature at the Weddell Sea mooring')
-    plt.savefig('Temperature.png',bbox_inches='tight',dpi=450)
+    ax.set_ylabel('Depth ($m$)',fontsize=11)
+    ax.set_xlabel('',fontsize=11)
+    ax.tick_params(size=9)
+    ax.set_title('Temperature at the Weddell Sea mooring',fontsize=12)
+    plt.savefig('Figures/Mooring_temperature_hovm_4x3.png',bbox_inches='tight',dpi=450)
+    plt.savefig('Figures/Mooring_temperature_hovm_4x3.pdf',format='pdf',bbox_inches='tight')
 
 # plotting temperature
 def sal_hovm(ds):
     """Created a Hovmöller plot of salinity."""
+    plt.rcParams["font.family"] = "serif" # change the base font
     f, ax = plt.subplots(figsize=(4, 3))
     ds.S.sel(depth=[-50,-135,-220]).plot.contourf('day','depth',ax=ax,levels=10,cbar_kwargs={'label': 'Salinity ($PSU$)'})
-    ax.set_ylabel('Depth ($m$)')
-    ax.set_xlabel('Date')
-    ax.set_title('Salinity at the Weddell Sea mooring')
-    plt.savefig('Salinity.png',bbox_inches='tight',dpi=450)
+    ax.set_ylabel('Depth ($m$)',fontsize=11)
+    ax.set_xlabel('',fontsize=11)
+    ax.tick_params(size=9)
+    ax.set_title('Salinity at the Weddell Sea mooring',fontsize=12)
+    plt.savefig('Figures/Mooring_salinity_hovm_4x3.png',bbox_inches='tight',dpi=450)
+    plt.savefig('Figures/Mooring_salinity_hovm_4x3.pdf',format='pdf',bbox_inches='tight')
 
 if __name__=="__main__":
     ds = open_mooring_ml_data()
