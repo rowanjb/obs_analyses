@@ -1,4 +1,4 @@
 *.png
 *.pdf
 Figures/*
-__pycach__/*
+__pycache__/*
