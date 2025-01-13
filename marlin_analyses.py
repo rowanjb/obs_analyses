@@ -87,11 +87,31 @@ def temp_hovm(ds):
     for ax in f.get_axes():
         ax.label_outer()
     f.suptitle('Temperature from Marlin Floats',fontsize=12)
-    f.supylabel('Depth ($m$)')
+    f.supylabel('Depth ($m$)',fontsize=11)
     f.tight_layout()
     plt.savefig('Figures/Marlin_temperature_hovm_8x6.png',bbox_inches='tight',dpi=450)
-    plt.savefig('Figures/Marlin_temperature_hovm_4x3_' + float_id[id] + '.pdf',format='pdf',bbox_inches='tight')
+    plt.savefig('Figures/Marlin_temperature_hovm_8x6.pdf',format='pdf',bbox_inches='tight')
+
+# plotting temperature
+def temp_hovm_one_float(ds,id):
+    """Created a Hovmöller plot of temperature for just one float."""
+    plt.rcParams["font.family"] = "serif" # change the base font
+    f, ax = plt.subplots(figsize=(4, 3))
+    cax = ds['temperature'].sel(buoy=id).plot.contourf('time','depth',ax=ax,levels=10,add_colorbar=False)
+    cbar = f.colorbar(cax, ax=ax)
+    cbar.ax.tick_params(labelsize=9)
+    cbar.ax.set_ylabel('Temperature ($\degree C$)')
+    ax.grid(True) 
+    ax.set_ylabel('Depth ($m$)',fontsize=11)
+    ax.set_xlabel('',fontsize=9)
+    ax.set_title('Temperature from float '+str(id),fontsize=12)
+    ax.tick_params(axis='both',labelsize=9)
+    ax.invert_yaxis()
+    f.tight_layout()
+    plt.savefig('Figures/Marlin_temperature_hovm_4x3_'+str(id)+'.png',bbox_inches='tight',dpi=450)
+    plt.savefig('Figures/Marlin_temperature_hovm_4x3_'+str(id)+'.pdf',format='pdf',bbox_inches='tight')
 
 if __name__=="__main__":
     ds = open_marlin_data()
     temp_hovm(ds)
+    temp_hovm_one_float(ds,226786)
