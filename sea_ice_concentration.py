@@ -137,6 +137,6 @@ def map_of_ice_conc(date_str):
     plt.close()
 
 if __name__=="__main__":
-    #sea_ice_conc_nc('20210401', '20220501')
-    all_dates_str, all_dates = list_of_date_strs('20210425', '20220501')
-    for date_str in all_dates_str: map_of_ice_conc(date_str)
+    sea_ice_conc_nc('20210326', '20220501')
+    #all_dates_str, all_dates = list_of_date_strs('20210425', '20220501')
+    #for date_str in all_dates_str: map_of_ice_conc(date_str)
