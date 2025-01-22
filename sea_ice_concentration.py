@@ -15,6 +15,8 @@ import cartopy.crs as ccrs
 import cartopy.feature as feature
 import matplotlib.ticker as mticker
 import time
+import geopandas as gpd
+from shapely.geometry import Point
 
 def download_data(date_str):
     """Credit for much of this function and the Bash script that it calls goes to copilot.
@@ -136,7 +138,38 @@ def map_of_ice_conc(date_str):
     print("Ice concentration map saved for date " + date_str)
     plt.close()
 
+def select_nearest_coord(latitude, longitude):
+    """Pass in the latitude (-40,-90) and longitude (-180,180) where you want the ice concentration.
+    Returns the nearest x and y indices.
+    Uses Haversine (assumes spherical Earth) so not accurage for large distances."""
+
+    with open('../filepaths/sea_ice_concentration') as f: dirpath = f.readlines()[0][:-1] # the [0] accesses the first line, and the [:-1] removes the newline tag
+    lonLat_Ant_fp, lonLat_Arc_fp = dirpath + '/LongitudeLatitudeGrid-s6250-Antarctic.hdf', dirpath + '/LongitudeLatitudeGrid-n6250-Arctic.hdf'
+    lonLat_Ant_hdf, lonLat_Arc_hdf = SD(lonLat_Ant_fp, SDC.READ), SD(lonLat_Arc_fp, SDC.READ)
+    lon_Ant_data, lon_Arc_data = lonLat_Ant_hdf.select('Longitudes').get(), lonLat_Arc_hdf.select('Longitudes').get()
+    lat_Ant_data, lat_Arc_data = lonLat_Ant_hdf.select('Latitudes').get(), lonLat_Arc_hdf.select('Latitudes').get()
+    lonLat_Ant_hdf.end(), lonLat_Arc_hdf.end()
+
+    # Because the grid from AWI is 0-360
+    if longitude<0: longitude = longitude + 360
+
+    # Credit: https://stackoverflow.com/questions/69556412/with-a-dataframe-that-contains-coordinates-find-other-rows-with-coordinates-wit
+    def haversine(lon1, lat1, lon2, lat2):
+        lon1, lat1, lon2, lat2 = np.radians(lon1), np.radians(lat1), np.radians(lon2), np.radians(lat2)
+        dlon = lon2 - lon1
+        dlat = lat2 - lat1
+        haver_formula = np.sin(dlat/2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2)**2
+        r = 3958.756 #6371 for distance in KM for miles use 3958.756
+        dist = 2 * r * np.arcsin(np.sqrt(haver_formula))
+        return dist
+    distances = haversine(lon_Ant_data, lat_Ant_data, longitude, latitude)
+    id = np.where(distances == distances.min())
+    
+    return id
+
+
 if __name__=="__main__":
-    sea_ice_conc_nc('20210326', '20220501')
+    #sea_ice_conc_nc('20210326', '20220501')
     #all_dates_str, all_dates = list_of_date_strs('20210425', '20220501')
     #for date_str in all_dates_str: map_of_ice_conc(date_str)
+    print(select_nearest_coord(longitude = -27.0048333, latitude = -69.0005000))
