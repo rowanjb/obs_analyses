@@ -7,6 +7,7 @@ import numpy as np
 from datetime import datetime, timedelta
 import scipy.io as spio
 import matplotlib.pyplot as plt 
+from sea_ice_concentration import select_nearest_coord
 
 def open_mooring_ml_data():
     """Opens CTD data in the mixed layer from the Weddell Sea mooring.
@@ -80,25 +81,51 @@ def open_mooring_ml_data():
 def temp_hovm(ds):
     """Created a Hovmöller plot of temperature."""
     plt.rcParams["font.family"] = "serif" # change the base font
-    f, ax = plt.subplots(figsize=(4, 3))
-    ds.T.sel(depth=[-50,-135,-220]).plot.contourf('day','depth',ax=ax,levels=20,cbar_kwargs={'label': 'Temperature ($\degree C$)'})
+    f, ax = plt.subplots(figsize=(4, 4))
+    ds.T.sel(depth=[-50,-135,-220]).plot.contourf('day','depth',ax=ax,levels=20,cbar_kwargs={'label': 'Temperature ($\degree C$)', 'orientation': 'horizontal'})
     ax.set_ylabel('Depth ($m$)',fontsize=11)
     ax.set_xlabel('',fontsize=11)
     ax.tick_params(size=9)
     ax.set_title('Temperature at the Weddell Sea mooring',fontsize=12)
+    
+    # Adding the sea ice data to the plot
+    with open('../filepaths/sea_ice_concentration') as f: dirpath = f.readlines()[0][:-1] # the [0] accesses the first line, and the [:-1] removes the newline tag
+    filepath = dirpath + '/sea_ice_concentration.nc'
+    id = select_nearest_coord(longitude = -27.0048333, latitude = -69.0005000) # Note 332.9125, -69.00584 is only 3360.27 m from the mooring
+    ds_si = xr.open_dataset(filepath).sel(date=slice("2021-03-26", "2022-04-06")).isel(x=id[0],y=id[1])
+    ax2 = ax.twinx()  # instantiate a second Axes that shares the same x-axis
+    color = 'tab:grey'
+    ax2.set_ylabel('Sea ice concentration ($\%$)', color=color, fontsize=11)  # we already handled the x-label with ax1
+    ax2.plot(ds_si['date'], ds_si['ice_conc'][:,0,0], color=color, linewidth=1)
+    ax2.tick_params(axis='y', labelcolor=color)
+
     plt.savefig('Figures/Mooring_temperature_hovm_4x3.png',bbox_inches='tight',dpi=450)
     plt.savefig('Figures/Mooring_temperature_hovm_4x3.pdf',format='pdf',bbox_inches='tight')
 
-# plotting temperature
+# plotting salinity
 def sal_hovm(ds):
     """Created a Hovmöller plot of salinity."""
     plt.rcParams["font.family"] = "serif" # change the base font
-    f, ax = plt.subplots(figsize=(4, 3))
-    ds.S.sel(depth=[-50,-135,-220]).plot.contourf('day','depth',ax=ax,levels=10,cbar_kwargs={'label': 'Salinity ($PSU$)'})
+    f, ax = plt.subplots(figsize=(4, 4))
+    p = ds.S.sel(depth=[-50,-135,-220]).plot.contourf('day','depth',ax=ax,levels=10,add_colorbar=False)
     ax.set_ylabel('Depth ($m$)',fontsize=11)
     ax.set_xlabel('',fontsize=11)
     ax.tick_params(size=9)
     ax.set_title('Salinity at the Weddell Sea mooring',fontsize=12)
+    cbar = plt.colorbar(p, orientation="horizontal", label='Salinity ($PSU$)')
+    cbar.ax.tick_params(rotation=35)
+
+    # Adding the sea ice data to the plot
+    with open('../filepaths/sea_ice_concentration') as f: dirpath = f.readlines()[0][:-1] # the [0] accesses the first line, and the [:-1] removes the newline tag
+    filepath = dirpath + '/sea_ice_concentration.nc'
+    id = select_nearest_coord(longitude = -27.0048333, latitude = -69.0005000) # Note 332.9125, -69.00584 is only 3360.27 m from the mooring
+    ds_si = xr.open_dataset(filepath).sel(date=slice("2021-03-26", "2022-04-06")).isel(x=id[0],y=id[1])
+    ax2 = ax.twinx()  # instantiate a second Axes that shares the same x-axis
+    color = 'tab:grey'
+    ax2.set_ylabel('Sea ice concentration ($\%$)', color=color, fontsize=11)  # we already handled the x-label with ax1
+    ax2.plot(ds_si['date'], ds_si['ice_conc'][:,0,0], color=color, linewidth=1)
+    ax2.tick_params(axis='y', labelcolor=color)
+
     plt.savefig('Figures/Mooring_salinity_hovm_4x3.png',bbox_inches='tight',dpi=450)
     plt.savefig('Figures/Mooring_salinity_hovm_4x3.pdf',format='pdf',bbox_inches='tight')
 
