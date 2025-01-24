@@ -5,6 +5,7 @@
 import xarray as xr 
 import pandas as pd
 import numpy as np
+import gsw
 from datetime import datetime, timedelta
 import scipy.io as spio
 import matplotlib.pyplot as plt 
@@ -28,14 +29,6 @@ def sea_ice():
 
     # You don't have thickness, so you need to look at 
 
-def mooring_stratification():
-    """Somehow calculates measures of stratification within the water column at the mooring, eg how much salt or heat needs to be removed 
-    to cause overturning..."""
-
-    ds = open_mooring_ml_data()
-
-    print(ds)
-
 def WOA_stratification():
     """Somehow calculates measures of stratification within the water column at a chosen location in the WOA data."""
 
@@ -50,5 +43,5 @@ def WOA_stratification():
 
 if __name__=="__main__":
     #open_ERA5_data()
-    #mooring_stratification()
-    WOA_stratification()
+    ds = open_mooring_ml_data()
+    #WOA_stratification()
