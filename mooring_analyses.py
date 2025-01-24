@@ -4,6 +4,7 @@
 import xarray as xr 
 import pandas as pd
 import numpy as np
+import gsw
 from datetime import datetime, timedelta
 import scipy.io as spio
 import matplotlib.pyplot as plt 
@@ -75,6 +76,13 @@ def open_mooring_ml_data():
         attrs=dict(description="Mooring data..."),
     )
 
+    # Adding calculation of density
+    # Note: sigma0 isn't strictly correct because (the gsw package) requires conservative temperature, which we don't have 
+    #       this leaves us the "pot_rho_t_exact" method/function, but then we need pressure and we only have 2 working P sensors (and I don't really trust on of them)
+    #       I am therefore using the p_from_z function, which is nice except I'm also not sure how much I actually trust the depths either
+    ds = ds.assign_coords(p_from_z=gsw.p_from_z(ds['depth'],-69.0005))
+    ds['pot_rho'] = gsw.pot_rho_t_exact(ds['S'],ds['T'],ds['p_from_z'],0) - 1000
+    
     return ds
 
 # plotting temperature
@@ -99,15 +107,15 @@ def temp_hovm(ds):
     ax2.plot(ds_si['date'], ds_si['ice_conc'][:,0,0], color=color, linewidth=1)
     ax2.tick_params(axis='y', labelcolor=color)
 
-    plt.savefig('Figures/Mooring_temperature_hovm_4x3.png',bbox_inches='tight',dpi=450)
-    plt.savefig('Figures/Mooring_temperature_hovm_4x3.pdf',format='pdf',bbox_inches='tight')
+    plt.savefig('Figures/Mooring_temperature_hovm_4x4.png',bbox_inches='tight',dpi=450)
+    plt.savefig('Figures/Mooring_temperature_hovm_4x4.pdf',format='pdf',bbox_inches='tight')
 
 # plotting salinity
 def sal_hovm(ds):
     """Created a Hovmöller plot of salinity."""
     plt.rcParams["font.family"] = "serif" # change the base font
     f, ax = plt.subplots(figsize=(4, 4))
-    p = ds.S.sel(depth=[-50,-135,-220]).plot.contourf('day','depth',ax=ax,levels=10,add_colorbar=False)
+    p = ds.S.sel(depth=[-50, -90, -135, -170, -220]).plot.contourf('day','depth',ax=ax,levels=10,add_colorbar=False)
     ax.set_ylabel('Depth ($m$)',fontsize=11)
     ax.set_xlabel('',fontsize=11)
     ax.tick_params(size=9)
@@ -126,10 +134,38 @@ def sal_hovm(ds):
     ax2.plot(ds_si['date'], ds_si['ice_conc'][:,0,0], color=color, linewidth=1)
     ax2.tick_params(axis='y', labelcolor=color)
 
-    plt.savefig('Figures/Mooring_salinity_hovm_4x3.png',bbox_inches='tight',dpi=450)
-    plt.savefig('Figures/Mooring_salinity_hovm_4x3.pdf',format='pdf',bbox_inches='tight')
+    plt.savefig('Figures/Mooring_salinity_hovm_4x4.png',bbox_inches='tight',dpi=450)
+    plt.savefig('Figures/Mooring_salinity_hovm_4x4.pdf',format='pdf',bbox_inches='tight')
+
+# plotting desnity
+def rho_hovm(ds):
+    """Created a Hovmöller plot of density."""
+    plt.rcParams["font.family"] = "serif" # change the base font
+    f, ax = plt.subplots(figsize=(4, 4))
+    p = ds.pot_rho.sel(depth=[-50,-135,-220]).plot.contourf('day','depth',ax=ax,levels=10,add_colorbar=False,cmap=plt.colormaps['hot_r'])
+    ax.set_ylabel('Depth ($m$)',fontsize=11)
+    ax.set_xlabel('',fontsize=11)
+    ax.tick_params(size=9)
+    ax.set_title('Density at the Weddell Sea mooring',fontsize=12)
+    cbar = plt.colorbar(p, orientation="horizontal", label='Potential density ($kg$ $m^{-3}$)')
+    cbar.ax.tick_params(rotation=35)
+
+    # Adding the sea ice data to the plot
+    with open('../filepaths/sea_ice_concentration') as f: dirpath = f.readlines()[0][:-1] # the [0] accesses the first line, and the [:-1] removes the newline tag
+    filepath = dirpath + '/sea_ice_concentration.nc'
+    id = select_nearest_coord(longitude = -27.0048333, latitude = -69.0005000) # Note 332.9125, -69.00584 is only 3360.27 m from the mooring
+    ds_si = xr.open_dataset(filepath).sel(date=slice("2021-03-26", "2022-04-06")).isel(x=id[0],y=id[1])
+    ax2 = ax.twinx()  # instantiate a second Axes that shares the same x-axis
+    color = 'tab:grey'
+    ax2.set_ylabel('Sea ice concentration ($\%$)', color=color, fontsize=11)  # we already handled the x-label with ax1
+    ax2.plot(ds_si['date'], ds_si['ice_conc'][:,0,0], color=color, linewidth=1)
+    ax2.tick_params(axis='y', labelcolor=color)
+
+    plt.savefig('Figures/Mooring_density_hovm_4x4.png',bbox_inches='tight',dpi=450)
+    plt.savefig('Figures/Mooring_density_hovm_4x4.pdf',format='pdf',bbox_inches='tight')
 
 if __name__=="__main__":
     ds = open_mooring_ml_data()
     temp_hovm(ds)
     sal_hovm(ds)
+    rho_hovm(ds)
