@@ -168,7 +168,7 @@ def density_flux(ds):
     ax4.tick_params(axis='y', labelcolor=color)
     ax4.spines.right.set_position(("axes", 1.4))
 
-    plt.savefig('density_flux.png',bbox_inches='tight',dpi=250)
+    plt.savefig('Figures/Density_flux.png',bbox_inches='tight',dpi=250)
 
     return dens_flux
 
