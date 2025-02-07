@@ -12,7 +12,9 @@ from sea_ice_concentration import select_nearest_coord
 
 def open_mooring_ml_data():
     """Opens CTD data in the mixed layer from the Weddell Sea mooring.
-    We're interested because it seems to show a convective plume."""
+    We're interested because it seems to show a convective plume.
+    The salinities returned are the corrected salinities from Carsten and Markus.
+    These seem unphysical to me and can be further corrected using correct_mooring_salinities(ds)."""
 
     # getting part of the file path, which is saved in a text file to avoid publishing it to GitHub
     # the [0] accesses the first line, and the [:-1] removes the newline tag
@@ -77,16 +79,127 @@ def open_mooring_ml_data():
     )
 
     # Adding calculation of density
-    # Note: sigma0 isn't strictly correct because (the gsw package) requires conservative temperature, which we don't have 
-    #       this leaves us the "pot_rho_t_exact" method/function, but then we need pressure and we only have 2 working P sensors (and I don't really trust on of them)
-    #       I am therefore using the p_from_z function, which is nice except I'm also not sure how much I actually trust the depths either
     ds = ds.assign_coords(p_from_z=gsw.p_from_z(ds['depth'],-69.0005))
-    ds['pot_rho'] = gsw.pot_rho_t_exact(ds['S'],ds['T'],ds['p_from_z'],0) - 1000
+    ds['SA'] = gsw.SA_from_SP(ds['S'],ds['p_from_z'],lon=-27.0048,lat=-69.0005)
+    ds['pot_rho'] = gsw.pot_rho_t_exact(ds['SA'],ds['T'],ds['p_from_z'],0) - 1000
+    
+    print("Mooring data opened")
+    return ds
+
+def correct_mooring_salinities(ds_mooring):
+    """The salinities from the lower two sensors seem, basically, wrong, so here I'm equating the sensors' means with those of WOA
+    climatologies to see if we can't maintain the interesting anomaly in the middle sensor but also attain a reasoanble mean."""
+
+    # Extract one year of data from the mooring
+    ds_mooring = ds_mooring.sel(day=slice('2021-04-01','2022-03-31'))
+
+    # Calculate the mean salinites at the two "bad sensors"
+    S = ds_mooring['S'] # Extract as a dataarray for easy handling
+    S_srfce_mean_mooring = S.sel(depth=-50).mean(dim='day').values
+    S_upper_mean_mooring = S.sel(depth=-135).mean(dim='day').values
+    S_lower_mean_mooring = S.sel(depth=-220).mean(dim='day').values
+
+    # Open the WOA data
+    with open('../filepaths/woa_filepath') as f: dirpath = f.readlines()[0][:-1] 
+    ds_woa = xr.open_dataset(dirpath + '/WOA_monthly_'+'s'+'_'+str(2015)+'.nc',decode_times=False)
+    ds_woa = ds_woa.rename({'time':'month'}) 
+    ds_woa['month'] = ds_woa['month'] - 35.5 # months are saved as arbitrary integers 
+
+    # Calculate the yearly average, based on: https://docs.xarray.dev/en/latest/examples/area_weighted_temperature.html
+    ds_woa['weights'] = ('month',[31,28,31,30,31,30,31,31,30,31,30,31]) # Number of days per month
+    ds_woa_weighted = ds_woa['s_an'].weighted(ds_woa['weights'])
+    woa_weighted_mean = ds_woa_weighted.mean('month')
+
+    '''
+    fig, ax = plt.subplots()
+    ax.plot(woa_weighted_mean,(-1)*woa_weighted_mean['depth'])
+    ax.plot(ds_woa['s_an'].mean(dim='month'),(-1)*woa_weighted_mean['depth'],c='r')
+    plt.savefig('test.png')
+    '''
+
+    S_srfce_mean_woa = woa_weighted_mean.interp(depth=50).values
+    S_upper_mean_woa = woa_weighted_mean.interp(depth=135).values
+    S_lower_mean_woa = woa_weighted_mean.interp(depth=220).values
+
+    print(" 50 m 12-month mean from mooring: "+str(S_srfce_mean_mooring))
+    print(" 50 m 12-month mean from WOA:     "+str(S_srfce_mean_woa))
+    S_srfce_mean_anomaly = S_srfce_mean_mooring-S_srfce_mean_woa
+    print("Difference: "+str(S_srfce_mean_anomaly))
+    print('')
+    print("135 m 12-month mean from mooring: "+str(S_upper_mean_mooring))
+    print("135 m 12-month mean from WOA:     "+str(S_upper_mean_woa))
+    S_upper_mean_anomaly = S_upper_mean_mooring-S_upper_mean_woa
+    print("Difference: "+str(S_upper_mean_anomaly))
+    print('')
+    print("220 m 12-month mean from mooring: "+str(S_lower_mean_mooring))
+    print("220 m 12-month mean from WOA:     "+str(S_lower_mean_woa))
+    S_lower_mean_anomaly = S_lower_mean_mooring-S_lower_mean_woa
+    print("Difference: "+str(S_lower_mean_anomaly))
+
+    # Correcting the salinities
+    S = xr.where(S['depth']==-50,S.sel(depth=-50) - S_srfce_mean_anomaly,S)
+    S = xr.where(S['depth']==-135,S.sel(depth=-135) - S_upper_mean_anomaly,S)
+    S = xr.where(S['depth']==-220,S.sel(depth=-220) - S_lower_mean_anomaly,S)
+    ds_mooring['S'] = S # Reassign the corrected values
+    print(ds_mooring)
+
+    # Adding calculation of density
+    ds_mooring = ds_mooring.assign_coords(p_from_z=gsw.p_from_z(ds_mooring['depth'],-69.0005))
+    ds_mooring['SA'] = gsw.SA_from_SP(ds_mooring['S'],ds_mooring['p_from_z'],lon=-27.0048,lat=-69.0005)
+    ds_mooring['pot_rho'] = gsw.pot_rho_t_exact(ds_mooring['SA'],ds_mooring['T'],ds_mooring['p_from_z'],0) - 1000
+
+    print("Salinities corrected")
+    return ds_mooring
+
+def open_mooring_profiles_data():
+    """Opens CTD data from profiles taken during the mooring launch/pickup cruises.
+    Work in progress..."""
+
+    # getting part of the file path, which is saved in a text file to avoid publishing it to GitHub
+    # the [0] accesses the first line, and the [:-1] removes the newline tag
+    with open('../filepaths/mooring_filepath') as f: dirpath = f.readlines()[0][:-1] 
+    
+    # creating the full filepaths to the .mat files
+    filepath_117_1 = dirpath + '/CTD/Profiles/117_1.mat'
+    filepath_dPS129_072_01 = dirpath + '/CTD/Profiles/dPS129_072_01.mat'
+
+    # opening the .mat files
+    mat_124 = spio.loadmat(filepath_117_1)['S']
+    mat_129 = spio.loadmat(filepath_dPS129_072_01)
+
+    # extracting metadata
+    cruise_124, lat_124, lon_124, date_124 = mat_124['CRUISE'][0][0][0], mat_124['LAT'][0][0][0][0], mat_124['LON'][0][0][0][0], mat_124['DATETIME'][0][0][0]
+    cruise_129, lat_129, lon_129, date_129 = mat_129['HDR']['CRUISE'][0][0][0], mat_129['HDR']['LAT'][0][0][0][0], mat_129['HDR']['LON'][0][0][0][0], mat_129['HDR']['DATETIME'][0][0][0]
+    
+    unnest = lambda mat : [i[0] for i in mat]
+
+    # extracting the hydro data 
+    pres_124  = unnest(mat_124['PRES'][0][0])
+    print(pres_124)
+    quit()
+
+    # creating an xarray dataset
+    ds = xr.Dataset(
+        data_vars=dict(
+            T=(["day","depth"], daily_avg_mooring_data(T)),
+            S=(["day","depth"], daily_avg_mooring_data(S)),
+            P=(["day","depth"], daily_avg_mooring_data(P)),
+        ),
+        coords=dict(
+            day=new_datetime_coords,
+            depth=[-50,-90,-135,-170,-220,-250],
+        ),
+        attrs=dict(description="Mooring data..."),
+    )
+
+    #THIS SHOULD USE SA NOT S
+    #ds = ds.assign_coords(p_from_z=gsw.p_from_z(ds['depth'],-69.0005))
+    #ds['pot_rho'] = gsw.pot_rho_t_exact(ds['S'],ds['T'],ds['p_from_z'],0) - 1000
     
     return ds
 
 def convective_resistance(ds):
-    """Calculates convective resistance, ie how much heat needs to be removed to cause homogenization. 
+    """Calculates convective resistance, i.e., how much heat needs to be removed to cause homogenization of the water column. 
     Reference depth is taken as 220 m, since this is the bottom working salinity sensor. 
     Note: Convective resistence /assumes/ that none of the heat loss goes into creating sea ice; maybe see Wilson and M. for more on this. 
         --->How to deal with pack ice? Some HF will make or melt ice, other will go into the water...
@@ -286,7 +399,10 @@ def rho_hovm(ds):
 
 if __name__=="__main__":
     ds = open_mooring_ml_data()
-    density_flux(ds)
-    #temp_hovm(ds)
-    #sal_hovm(ds)
-    #rho_hovm(ds)
+    ds = correct_mooring_salinities(ds)
+    #density_flux(ds)
+    #open_mooring_profiles_data()
+    temp_hovm(ds)
+    sal_hovm(ds)
+    rho_hovm(ds)
+    
