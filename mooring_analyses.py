@@ -313,6 +313,7 @@ def temp_hovm(ds):
     ax2.plot(ds_si['date'], ds_si['ice_conc'][:,0,0], color=color, linewidth=1)
     ax2.tick_params(axis='y', labelcolor=color)
 
+    '''
     # Adding convective resistance to the plot
     convr = convective_resistance(ds) # kind of recursive...
     ax3 = ax.twinx()  # instantiate a second Axes that shares the same x-axis
@@ -321,6 +322,7 @@ def temp_hovm(ds):
     ax3.set_ylabel('Convective resistance ($J$ $m^{-3}$)', color=color, fontsize=11)  # we already handled the x-label with ax1
     ax3.plot(convr['day'], convr, color=color, linewidth=1)
     ax3.tick_params(axis='y', labelcolor=color)
+    '''
 
     plt.savefig('Figures/Mooring_temperature_hovm_4x4.png',bbox_inches='tight',dpi=450)
     plt.savefig('Figures/Mooring_temperature_hovm_4x4.pdf',format='pdf',bbox_inches='tight')
@@ -349,6 +351,7 @@ def sal_hovm(ds):
     ax2.plot(ds_si['date'], ds_si['ice_conc'][:,0,0], color=color, linewidth=1)
     ax2.tick_params(axis='y', labelcolor=color)
 
+    '''
     # Adding convective resistance to the plot
     convr = convective_resistance(ds) # kind of recursive...
     ax3 = ax.twinx()  # instantiate a second Axes that shares the same x-axis
@@ -357,6 +360,7 @@ def sal_hovm(ds):
     ax3.set_ylabel('Convective resistance ($J$ $m^{-3}$)', color=color, fontsize=11)  # we already handled the x-label with ax1
     ax3.plot(convr['day'], convr, color=color, linewidth=1)
     ax3.tick_params(axis='y', labelcolor=color)
+    '''
 
     plt.savefig('Figures/Mooring_salinity_hovm_4x4.png',bbox_inches='tight',dpi=450)
     plt.savefig('Figures/Mooring_salinity_hovm_4x4.pdf',format='pdf',bbox_inches='tight')
@@ -385,6 +389,7 @@ def rho_hovm(ds):
     ax2.plot(ds_si['date'], ds_si['ice_conc'][:,0,0], color=color, linewidth=1)
     ax2.tick_params(axis='y', labelcolor=color)
 
+    '''
     # Adding convective resistance to the plot
     convr = convective_resistance(ds) # kind of recursive...
     ax3 = ax.twinx()  # instantiate a second Axes that shares the same x-axis
@@ -393,7 +398,8 @@ def rho_hovm(ds):
     ax3.set_ylabel('Convective resistance ($J$ $m^{-3}$)', color=color, fontsize=11)  # we already handled the x-label with ax1
     ax3.plot(convr['day'], convr, color=color, linewidth=1)
     ax3.tick_params(axis='y', labelcolor=color)
-
+    '''
+    
     plt.savefig('Figures/Mooring_density_hovm_4x4.png',bbox_inches='tight',dpi=450)
     plt.savefig('Figures/Mooring_density_hovm_4x4.pdf',format='pdf',bbox_inches='tight')
 
@@ -402,6 +408,8 @@ if __name__=="__main__":
     ds = correct_mooring_salinities(ds)
     #density_flux(ds)
     #open_mooring_profiles_data()
+    
+    #FOR THE EGU POSTER, MAKE PLOTS OF ANOMALLY RATHER THAN "CORRECTED"
     temp_hovm(ds)
     sal_hovm(ds)
     rho_hovm(ds)
