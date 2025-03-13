@@ -141,9 +141,9 @@ def correct_mooring_salinities(ds_mooring):
     S = xr.where(S['depth']==-135,S.sel(depth=-135) - S_upper_mean_anomaly,S)
     S = xr.where(S['depth']==-220,S.sel(depth=-220) - S_lower_mean_anomaly,S)
     ds_mooring['S'] = S # Reassign the corrected values
-    print(ds_mooring)
+    ##print(ds_mooring)
 
-    # Adding calculation of density
+    # Adding calculation of density (redoing earilier calculation in above func)
     ds_mooring = ds_mooring.assign_coords(p_from_z=gsw.p_from_z(ds_mooring['depth'],-69.0005))
     ds_mooring['SA'] = gsw.SA_from_SP(ds_mooring['S'],ds_mooring['p_from_z'],lon=-27.0048,lat=-69.0005)
     ds_mooring['pot_rho'] = gsw.pot_rho_t_exact(ds_mooring['SA'],ds_mooring['T'],ds_mooring['p_from_z'],0) - 1000
@@ -406,11 +406,11 @@ def rho_hovm(ds):
 if __name__=="__main__":
     ds = open_mooring_ml_data()
     ds = correct_mooring_salinities(ds)
-    #density_flux(ds)
+    density_flux(ds)
     #open_mooring_profiles_data()
     
     #FOR THE EGU POSTER, MAKE PLOTS OF ANOMALLY RATHER THAN "CORRECTED"
-    temp_hovm(ds)
-    sal_hovm(ds)
-    rho_hovm(ds)
+    #temp_hovm(ds)
+    #sal_hovm(ds)
+    #rho_hovm(ds)
     
