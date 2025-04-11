@@ -13,6 +13,10 @@ import scipy.io as spio
 import matplotlib.pyplot as plt 
 from sea_ice_concentration import select_nearest_coord
 
+import sys
+sys.path.insert(1, '../model_analyses/')
+import cell_thickness_calculator as ctc
+
 def open_mooring_ml_data(time_delta='day'):
     """Opens CTD data in the mixed layer from the Weddell Sea mooring.
     We're interested because it seems to show a convective plume.
@@ -168,6 +172,105 @@ def correct_mooring_salinities(ds_mooring):
 
     print("Salinities corrected")
     return ds_mooring
+
+def fill_mooring_with_WOA(ds, season='autumn'):
+    """For filling in a len(1) in time mooring dataset with WOA climatologies.
+    season is relative to the N.H.; default is autumn (S.H. spring)."""
+
+    # Select just the desired depth levels, if not already done
+    ds = ds.where(~np.isnan(ds['pot_rho']),drop=True)
+
+    # Calculating thickness levels
+    # You can change some of these parameters if you want
+    # But these are the values that I've used most commonly in the model
+    depth = 500
+    num_levels, numAx1, numAx2 = 50, 150, 150
+    size = str(num_levels) +'x' + str(numAx1) + 'x' + str(numAx2)
+    pot_temp = True # Whether you want pot or in-situ temp
+    abs_salt = True # Whether you want abs or practical salt
+    x1, x2 = 1, num_levels # Indices of top and bottom cells
+    fx1 = 1 # Depth of bottom of top cell
+    min_slope = 1 # Minimum slope (should probably > x1)
+    A, B, C, _, _ = ctc.find_parameters(x1, x2, fx1, depth, min_slope)
+    dz = ctc.return_cell_thicknesses(x1, x2, depth, A, B, C) 
+
+    # Depths used in the model (calculated to the centre of the cells)
+    z = np.zeros(len(dz))
+    for i,n in enumerate(dz): # Getting sell depths
+        if i==0: z[i] = n/2
+        else: z[i] = np.sum(dz[:i]) + n/2
+
+    # Opening the WOA data; seasons are ['winter', 'spring', 'summer', 'autumn'] (i.e., NORTHERN HEMISPHERE SEASONS!)
+    with open('../filepaths/woa_filepath') as f: dirpath = f.readlines()[0][:-1] # the [0] accesses the first line, and the [:-1] removes the newline tag
+    das = xr.open_dataset(dirpath + '/WOA_seasonally_'+'s'+'_'+str(2015)+'.nc',decode_times=False)['s_an']
+    s_woa = das.isel(time=2).interp(depth=z) # time=2 refers to "summer"
+    dat = xr.open_dataset(dirpath + '/WOA_seasonally_'+'t'+'_'+str(2015)+'.nc',decode_times=False)['t_an']
+    t_woa = dat.isel(time=2).interp(depth=z) # time=2 refers to "summer"
+    p = gsw.p_from_z((-1)*z,lat=-69.0005) # Calculating pressure from depth, then getting absolute salinity, and potential temperature 
+    SA = gsw.SA_from_SP(s_woa,p,lat=-69.0005,lon=-27.0048)           # ...(you should want theta/pt---this is what the model demands!)
+    pt = gsw.pt0_from_t(SA,t_woa,p)
+
+    # Determining which salt and temp to use
+    if pot_temp: # If potential temp is what we're looking for, then...
+        dst = gsw.pt0_from_t(ds['SA'],ds['T'],ds['p_from_z']).values # Let t (mooring) be potential temperature
+        t_woa = pt # Let t (WOA) now be potential temperature 
+        t_name = 'theta' # Let the var name in the file be theta
+    else: # i.e., if we /don't/ want potential temp, we will use in-situ
+        dst = ds['T'].values 
+        t_name = 'T'
+    if abs_salt: # Similarly, if it is absolute salinity that we're looking for, then...
+        dss = ds['SA'].values
+        s_woa = SA # And let s (WOA) be absolute salinity
+        s_name = 'SA'
+    else: # i.e., if we /don't/ want absolute salinity, then we likely want PSU
+        dss = ds['S'].values
+        s_name = 'S'
+    
+    # Finding depth threshold indices, i.e., where in the model depths do mooring data apply
+    id50  = np.where(z == np.min(z[z>50]) )
+    id135 = np.where(z == np.min(z[z>135]) )
+    id220 = np.where(z == np.min(z[z>220]) )
+
+    # Interpolating/filling values
+    s, t = np.empty(len(z)), np.empty(len(z)) # These are our final s and t vectors
+    for n,d in enumerate(z):
+        if d<50:
+            mean_diff_s = dss[0] - s_woa[id50]
+            mean_diff_t = dst[0] - t_woa[id50]
+            s[n] = s_woa[n] + mean_diff_s
+            t[n] = t_woa[n] + mean_diff_t
+        elif d<135:
+            del_s = dss[1] - dss[0]
+            del_t = dst[1] - dst[0]
+            weight = (d-50)/(135-50)
+            s[n] = dss[0] + del_s*weight
+            t[n] = dst[0] + del_t*weight
+        elif d<220:
+            del_s = dss[2] - dss[1]
+            del_t = dst[2] - dst[1]
+            weight = (d-135)/(220-135)
+            s[n] = dss[1] + del_s*weight
+            t[n] = dst[1] + del_t*weight
+        else:
+            mean_diff_s = dss[2] - s_woa[id220]
+            mean_diff_t = dst[2] - t_woa[id220]
+            s[n] = s_woa[n] + mean_diff_s
+            t[n] = t_woa[n] + mean_diff_t
+    
+    # Creating an xr dataset
+    ds_filled = xr.Dataset(
+        data_vars=dict(
+            T=(["z"], t),
+            S=(["z"], s),
+            dz=(["z"], dz),
+        ),
+        coords=dict(
+            z=z,
+        ),
+        attrs=dict(description="Mooring data, filled with WOA climatologies and at the model's vertical resolution"),
+    )
+
+    return ds_filled
 
 def open_mooring_profiles_data():
     """Opens CTD data from profiles taken during the mooring launch/pickup cruises.
@@ -405,17 +508,14 @@ if __name__=="__main__":
     ds = open_mooring_ml_data(time_delta='hour')
     ds = correct_mooring_salinities(ds).isel(day=slice(0,-1,2))
 
-    '''
     start_date, end_date = datetime(2021,4,1,0,0,0), datetime(2022,3,31,0,0,0)
     vlines = [datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)]
     plt_hovm(ds, 'T', start_date, end_date, vlines=vlines)
     plt_hovm(ds, 'SA', start_date, end_date, vlines=vlines)
     plt_hovm(ds, 'pot_rho', start_date, end_date, vlines=vlines)
-    '''
 
     start_date, end_date = datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)
     patches = [((datetime(2021,9,13,21),-220), timedelta(hours=6), 170), ((datetime(2021,9,15,21),-220), timedelta(hours=6), 170)]
     plt_hovm(ds, 'T', start_date, end_date, patches=patches)
     plt_hovm(ds, 'SA', start_date, end_date, patches=patches)
     plt_hovm(ds, 'pot_rho', start_date, end_date, patches=patches)
-    
