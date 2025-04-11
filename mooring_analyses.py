@@ -8,6 +8,7 @@ import gsw
 from datetime import datetime, timedelta
 import matplotlib.ticker as ticker
 import matplotlib.dates as mdates
+import matplotlib.patches as ptcs
 import scipy.io as spio
 import matplotlib.pyplot as plt 
 from sea_ice_concentration import select_nearest_coord
@@ -307,43 +308,83 @@ def density_flux(ds):
 
     return dens_flux
 
-# EGU:
-# do the same thing for salinity and then say, based on the fluxes of salinity and heat that we have, regardless of the concentration 
-# of sea ice, we know what induced overturning. Then we can use ERA5/IFS plus satellite concentrations to guess where else this
-# could happen, and we can model the salt+heat flux using MITgcm (once we also have a good resolution, mixing scheme, and boundary
-# conditions)
-
 # plotting temperature
-def temp_hovm(ds):
-    """Created a Hovmöller plot of temperature."""
+def plt_hovm(ds, var, start_date, end_date, **kwargs):
+    """Created a Hovmöller plot of (e.g.,) temperature.
+    var is a string: "T" "SA" "pot_rho".
+    Dates should be datetime objects.
+    **kwargs can contain:
+        an optional 'vlines' list of datetime objects
+        an optional 'vlines_colour; (e.g., 'k')
+        lists of parameters for a patch, i.e., [((start_x_coord, start_y_coord), thickness, height)]
+            E.g., [((datetime(2021,9,13,21),-220), timedelta(hours=6), 170)]"""
+
+    # Some var-specific definitions
+    depths = {'T': [-50, -90, -135, -170, -220], 'SA': [-50, -135, -220], 'pot_rho': [-50, -135, -220]}
+    titles = {'T': 'Temperature ($\degree C$)', 'SA': 'Salinity ($PSU$)', 'pot_rho': 'Potential density ($kg$ $m^{-3}$)'}
+    lims = {'T': (-2,2), 'SA': (34.07, 34.91), 'pot_rho': (27.30, 27.87)}
+    cm = {'T': 'coolwarm', 'SA': 'viridis', 'pot_rho': 'hot_r'}
+
+    # Plotting
+    lower_lim, upper_lim = lims[var]
+    norm = plt.Normalize(lower_lim, upper_lim) # Mapping to the colourbar internal [0, 1]
     plt.rcParams["font.family"] = "serif" # change the base font
     f, ax = plt.subplots(figsize=(5, 2.5))
-    p = ds.T.sel(depth=[-50, -90, -135, -170, -220]).plot.contourf('day','depth',ax=ax,levels=20,add_colorbar=False)
+    p = ds[var].sel(depth=depths[var]).plot.contourf('day','depth',ax=ax,levels=50,norm=norm,add_colorbar=False,cmap=plt.colormaps[cm[var]])
     ax.set_ylabel('Depth ($m$)',fontsize=11)
+    ax.set_yticks(depths[var])
     ax.set_xlabel('',fontsize=11)
-    ax.set_xlim(datetime(2021,4,1),datetime(2022,3,31))
+    ax.set_xlim(start_date,end_date)
     ax.tick_params(labelsize=9)
-    #ax.tick_params(axis='x',rotation=35)
-    ax.set_title('Temperature ($\degree C$)',fontsize=12)
+    ax.set_title(titles[var],fontsize=12)
     cbar = plt.colorbar(p, orientation="vertical")#, label='Temperature ($\degree C$)')
     cbar.ax.tick_params(labelsize=9)
-    #ax.vlines(datetime(2021,8,15),-220,-50,colors='black')
-    #ax.vlines(datetime(2021,10,15),-220,-50,colors='black')
-    ax.xaxis.set_major_locator(ticker.MultipleLocator(14))
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m'))
+    cbar.ax.set_ylim(lower_lim, upper_lim)
+
+    # Handling the xaxis formatting
+    time_delta = start_date - end_date
+    if abs(int(time_delta.days)) < 12: # i.e., less than 1.5 weeks-ish
+        locator = mdates.DayLocator(interval=2) #WeekdayLocator(interval=2)
+        formatter = mdates.DateFormatter('%d/%m')
+    elif abs(int(time_delta.days)) < 32: # i.e., less than one month
+        locator = mdates.WeekdayLocator(interval=7)
+        formatter = mdates.DateFormatter('%d/%m')
+    elif abs(int(time_delta.days)) < 190: # i.e., less than six months
+        locator = mdates.MonthLocator()
+        formatter = mdates.DateFormatter('%m/%y')
+    else: # i.e., over six months (up to around 1 year, which is how much data we have)
+        locator = mdates.MonthLocator(interval=2)
+        formatter = mdates.DateFormatter('%m/%y')
+    ax.xaxis.set_major_formatter(formatter=formatter)
+    ax.xaxis.set_major_locator(locator=locator)
+
+    # vlines
+    if 'vlines' in kwargs:
+        if 'vlines_colour' in kwargs: c = kwargs['vlines_colour']
+        else: c = 'k'
+        for vline_date in kwargs['vlines']: 
+            ax.vlines(vline_date,-220,-50,colors=c) 
+    
+    # patches
+    if 'patches' in kwargs:
+        for patch in kwargs['patches']:
+            start_coords, width, height = patch
+            rect = ptcs.Rectangle(start_coords, width, height, fc="grey", ec='grey', alpha=0.3)
+            ax.add_patch(rect)
 
     # Adding the sea ice data to the plot
     with open('../filepaths/sea_ice_concentration') as f: dirpath = f.readlines()[0][:-1] # the [0] accesses the first line, and the [:-1] removes the newline tag
     filepath = dirpath + '/sea_ice_concentration.nc'
     id = select_nearest_coord(longitude = -27.0048333, latitude = -69.0005000) # Note 332.9125, -69.00584 is only 3360.27 m from the mooring
-    ds_si = xr.open_dataset(filepath).sel(date=slice("2021-04-01", "2022-03-31")).isel(x=id[0],y=id[1])
+    ds_si = xr.open_dataset(filepath).sel(date=slice(np.datetime64(start_date), np.datetime64(end_date))).isel(x=id[0],y=id[1])
     ax2 = ax.twinx()  # instantiate a second Axes that shares the same x-axis
     color = 'tab:grey'
-    ax2.spines.right.set_position(("axes", 1.35))
-    ax2.set_ylabel('Sea ice conc. ($\%$)', color=color, fontsize=11)  # we already handled the x-label with ax1
+    ax2.spines.right.set_position(("axes", 1.3))
+    ax2.set_ylabel('Sea ice concentration ($\%$)', color=color, fontsize=11)  # we already handled the x-label with ax1
     ax2.plot(ds_si['date'], ds_si['ice_conc'][:,0,0], color=color, linewidth=1)
     ax2.tick_params(axis='y', labelcolor=color, labelsize=9)
 
+    ''' Commenting this out because I don't really like it for EGU
     # Adding convective resistance to the plot
     convr = convective_resistance(ds,type='mass') # kind of recursive...
     ax3 = ax.twinx()  # instantiate a second Axes that shares the same x-axis
@@ -352,105 +393,29 @@ def temp_hovm(ds):
     ax3.set_ylabel('Mass anomaly ($kg$ $m^{-2}$)', color=color, fontsize=11)  # we already handled the x-label with ax1
     ax3.plot(convr['day'], convr, color=color, linewidth=1)
     ax3.tick_params(axis='y', labelcolor=color, labelsize=9)
+    '''
 
-    plt.savefig('Figures/Mooring_temperature_hovm_4x4_short.png',bbox_inches='tight',dpi=900)
-    plt.savefig('Figures/Mooring_temperature_hovm_4x4_short.pdf',format='pdf',bbox_inches='tight')
+    fp = ('Figures/hovmollers/Mooring_'+var+'_hovm_'+str(start_date.year)+str(start_date.month).zfill(2)+
+          str(start_date.day).zfill(2)+'-'+str(end_date.year)+str(end_date.month).zfill(2)+str(end_date.day).zfill(2)+'.png')
+    plt.savefig(fp,bbox_inches='tight',dpi=900)
+    print(fp)
+    #plt.savefig('Figures/Mooring_temperature_hovm_4x4_short2.pdf',format='pdf',bbox_inches='tight')
 
-# plotting salinity
-def sal_hovm(ds):
-    """Created a Hovmöller plot of salinity."""
-    plt.rcParams["font.family"] = "serif" # change the base font
-    f, ax = plt.subplots(figsize=(5, 2.5))
-    p = ds.S.sel(depth=[-50, -135, -220]).plot.contourf('day','depth',ax=ax,levels=20,add_colorbar=False)
-    ax.set_ylabel('Depth ($m$)',fontsize=11)
-    ax.set_xlabel('',fontsize=11)
-    ax.set_xlim(datetime(2021,4,1),datetime(2022,3,31))
-    ax.tick_params(labelsize=9)
-    #ax.tick_params(axis='x',rotation=35)
-    ax.set_title('Salinity ($PSU$)',fontsize=12)
-    cbar = plt.colorbar(p, orientation="vertical")#, label='Salinity ($PSU$)')
-    cbar.ax.tick_params(labelsize=9)
-    #ax.vlines(datetime(2021,8,15),-220,-50,colors='black')
-    #ax.vlines(datetime(2021,10,15),-220,-50,colors='black')
-    ax.xaxis.set_major_locator(ticker.MultipleLocator(14))
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m'))
+if __name__=="__main__":   
+    ds = open_mooring_ml_data(time_delta='hour')
+    ds = correct_mooring_salinities(ds).isel(day=slice(0,-1,2))
 
-    # Adding the sea ice data to the plot
-    with open('../filepaths/sea_ice_concentration') as f: dirpath = f.readlines()[0][:-1] # the [0] accesses the first line, and the [:-1] removes the newline tag
-    filepath = dirpath + '/sea_ice_concentration.nc'
-    id = select_nearest_coord(longitude = -27.0048333, latitude = -69.0005000) # Note 332.9125, -69.00584 is only 3360.27 m from the mooring
-    ds_si = xr.open_dataset(filepath).sel(date=slice("2021-04-01", "2022-03-31")).isel(x=id[0],y=id[1])
-    ax2 = ax.twinx()  # instantiate a second Axes that shares the same x-axis
-    color = 'tab:grey'
-    ax2.spines.right.set_position(("axes", 1.35))
-    ax2.set_ylabel('Sea ice conc. ($\%$)', color=color, fontsize=11)  # we already handled the x-label with ax1
-    ax2.plot(ds_si['date'], ds_si['ice_conc'][:,0,0], color=color, linewidth=1)
-    ax2.tick_params(axis='y', labelcolor=color, labelsize=9)
+    '''
+    start_date, end_date = datetime(2021,4,1,0,0,0), datetime(2022,3,31,0,0,0)
+    vlines = [datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)]
+    plt_hovm(ds, 'T', start_date, end_date, vlines=vlines)
+    plt_hovm(ds, 'SA', start_date, end_date, vlines=vlines)
+    plt_hovm(ds, 'pot_rho', start_date, end_date, vlines=vlines)
+    '''
 
-    # Adding convective resistance to the plot
-    convr = convective_resistance(ds,type='mass') # kind of recursive...
-    ax3 = ax.twinx()  # instantiate a second Axes that shares the same x-axis
-    color = 'tab:red'
-    ax3.spines.right.set_position(("axes", 1.6))
-    ax3.set_ylabel('Mass anomaly ($kg$ $m^{-2}$)', color=color, fontsize=11)  # we already handled the x-label with ax1
-    ax3.plot(convr['day'], convr, color=color, linewidth=1)
-    ax3.tick_params(axis='y', labelcolor=color, labelsize=9)
-
-    plt.savefig('Figures/Mooring_salinity_hovm_4x4_short.png',bbox_inches='tight',dpi=900)
-    plt.savefig('Figures/Mooring_salinity_hovm_4x4_short.pdf',format='pdf',bbox_inches='tight')
-
-# plotting desnity
-def rho_hovm(ds):
-    """Created a Hovmöller plot of density."""
-    plt.rcParams["font.family"] = "serif" # change the base font
-    f, ax = plt.subplots(figsize=(5, 2.5))
-    p = ds.pot_rho.sel(depth=[-50,-135,-220]).plot.contourf('day','depth',ax=ax,levels=20,add_colorbar=False,cmap=plt.colormaps['hot_r'])
-    ax.set_ylabel('Depth ($m$)',fontsize=11)
-    ax.set_xlabel('',fontsize=11)
-    ax.set_xlim(datetime(2021,4,1),datetime(2022,3,31))
-    ax.tick_params(labelsize=9)
-    #ax.tick_params(axis='x',rotation=35)
-    ax.set_title('Potential density ($kg$ $m^{-3}$)',fontsize=12)
-    cbar = plt.colorbar(p, orientation="vertical")#, label='Potential density ($kg$ $m^{-3}$)')
-    cbar.ax.tick_params(labelsize=9)
-    ax.vlines(datetime(2021,8,15),-250,-50,colors='black')
-    ax.vlines(datetime(2021,10,15),-250,-50,colors='black')
-    ax.xaxis.set_major_locator(ticker.MultipleLocator(14))
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m'))
-    
-    # Adding the sea ice data to the plot
-    with open('../filepaths/sea_ice_concentration') as f: dirpath = f.readlines()[0][:-1] # the [0] accesses the first line, and the [:-1] removes the newline tag
-    filepath = dirpath + '/sea_ice_concentration.nc'
-    id = select_nearest_coord(longitude = -27.0048333, latitude = -69.0005000) # Note 332.9125, -69.00584 is only 3360.27 m from the mooring
-    ds_si = xr.open_dataset(filepath).sel(date=slice("2021-04-01", "2022-03-31")).isel(x=id[0],y=id[1])
-    ax2 = ax.twinx()  # instantiate a second Axes that shares the same x-axis
-    color = 'tab:grey'
-    ax2.spines.right.set_position(("axes", 1.35))
-    ax2.set_ylabel('Sea ice conc. ($\%$)', color=color, fontsize=11)  # we already handled the x-label with ax1
-    ax2.plot(ds_si['date'], ds_si['ice_conc'][:,0,0], color=color, linewidth=1)
-    ax2.tick_params(axis='y', labelcolor=color, labelsize=9)
-
-    # Adding convective resistance to the plot
-    convr = convective_resistance(ds,type='mass') # kind of recursive...
-    ax3 = ax.twinx()  # instantiate a second Axes that shares the same x-axis
-    color = 'tab:red'
-    ax3.spines.right.set_position(("axes", 1.6))
-    ax3.set_ylabel('Mass anomaly ($kg$ $m^{-2}$)', color=color, fontsize=11)  # we already handled the x-label with ax1
-    ax3.plot(convr['day'], convr, color=color, linewidth=1)
-    ax3.tick_params(axis='y', labelcolor=color, labelsize=9)
-    
-    plt.savefig('Figures/Mooring_density_hovm_4x4_vlines.png',bbox_inches='tight',dpi=900)
-    plt.savefig('Figures/Mooring_density_hovm_4x4_vlines.pdf',format='pdf',bbox_inches='tight')
-
-if __name__=="__main__":
-    ds = open_mooring_ml_data(time_delta='day')
-    ds = correct_mooring_salinities(ds)
-
-    #density_flux(ds)
-    #open_mooring_profiles_data()
-    
-    #FOR THE EGU POSTER, MAKE PLOTS OF ANOMALLY RATHER THAN "CORRECTED"
-    temp_hovm(ds)
-    #sal_hovm(ds)
-    #rho_hovm(ds)
+    start_date, end_date = datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)
+    patches = [((datetime(2021,9,13,21),-220), timedelta(hours=6), 170), ((datetime(2021,9,15,21),-220), timedelta(hours=6), 170)]
+    plt_hovm(ds, 'T', start_date, end_date, patches=patches)
+    plt_hovm(ds, 'SA', start_date, end_date, patches=patches)
+    plt_hovm(ds, 'pot_rho', start_date, end_date, patches=patches)
     
