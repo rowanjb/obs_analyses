@@ -504,10 +504,111 @@ def plt_hovm(ds, var, start_date, end_date, **kwargs):
     print(fp)
     #plt.savefig('Figures/Mooring_temperature_hovm_4x4_short2.pdf',format='pdf',bbox_inches='tight')
 
+# plotting temperature
+def plt_hovm_EGU(ds, start_date, end_date, **kwargs):
+    """*Plots used in my EGU25 poster, created specifically for posterity.
+    Created a Hovmöller plot of (e.g.,) temperature.
+    var is a string: "T" "SA" "pot_rho".
+    Dates should be datetime objects.
+    **kwargs can contain:
+        an optional 'vlines' list of datetime objects
+        an optional 'vlines_colour; (e.g., 'k')
+        lists of parameters for a patch, i.e., [((start_x_coord, start_y_coord), thickness, height)]
+            E.g., [((datetime(2021,9,13,21),-220), timedelta(hours=6), 170)]"""
+
+    # Some var-specific definitions
+    depths = {'T': [-50, -90, -135, -170, -220], 'SA': [-50, -135, -220], 'pot_rho': [-50, -135, -220]}
+    titles = {'T': 'Temperature', 'SA': 'Salinity', 'pot_rho': 'Potential\ndensity'}
+    units = {'T': '$\degree C$', 'SA': '$PSU$', 'pot_rho': '$kg$ $m^{-3}$'}
+    lims = {'T': (-2,2), 'SA': (34.07, 34.91), 'pot_rho': (27.30, 27.87)}
+    cm = {'T': 'coolwarm', 'SA': 'viridis', 'pot_rho': 'hot_r'}
+
+    #== Plotting ==#
+    
+    plt.rcParams["font.family"] = "serif" # change the base font
+    f, axs = plt.subplots(nrows=3,ncols=1,figsize=(6, 5),sharex=True)
+    
+    vars = ['T','SA','pot_rho']
+    for n in [0,2,1]: # We want this order for reasons
+        var = vars[n]
+        lower_lim, upper_lim = lims[var]
+        norm = plt.Normalize(lower_lim, upper_lim) # Mapping to the colourbar internal [0, 1]
+        p = ds[var].sel(depth=depths[var]).plot.contourf('day','depth',ax=axs[n],levels=50,norm=norm,add_colorbar=False,cmap=plt.colormaps[cm[var]])
+        
+        # Adding the sea ice data to the plot
+        with open('../filepaths/sea_ice_concentration') as f: dirpath = f.readlines()[0][:-1] # the [0] accesses the first line, and the [:-1] removes the newline tag
+        filepath = dirpath + '/sea_ice_concentration.nc'
+        id = select_nearest_coord(longitude = -27.0048333, latitude = -69.0005000) # Note 332.9125, -69.00584 is only 3360.27 m from the mooring
+        ds_si = xr.open_dataset(filepath).sel(date=slice(np.datetime64(start_date), np.datetime64(end_date))).isel(x=id[0],y=id[1])
+        ax2 = axs[n].twinx()  # instantiate a second Axes that shares the same x-axis
+        color = 'tab:grey'
+        ax2.spines.right.set_position(("axes", 1.3))
+        ax2.set_ylabel('')#Sea ice conc. ($\%$)', color=color, fontsize=11)  # we already handled the x-label with ax1
+        ax2.plot(ds_si['date'], ds_si['ice_conc'][:,0,0], color=color, linewidth=1)
+        ax2.tick_params(axis='y', labelcolor=color, labelsize=9)
+        
+        cbar = plt.colorbar(p, orientation="vertical")#, label='Temperature ($\degree C$)')
+        cbar.set_label(units[var], rotation=90, fontsize=9)
+        cbar.ax.tick_params(labelsize=9)
+        cbar.ax.set_ylim(lower_lim, upper_lim)
+        axs[n].set_ylabel('')#Depth ($m$)',fontsize=11)
+        axs[n].set_yticks(depths[var])
+        axs[n].set_xlabel('',fontsize=11)
+        axs[n].set_xlim(start_date,end_date)
+        axs[n].tick_params(labelsize=9)
+        axs[n].yaxis.set_major_formatter(ticker.FormatStrFormatter('%d m'))
+
+        # Handling the xaxis formatting
+        time_delta = start_date - end_date
+        if abs(int(time_delta.days)) < 12: # i.e., less than 1.5 weeks-ish
+            locator = mdates.DayLocator(interval=2) #WeekdayLocator(interval=2)
+            formatter = mdates.DateFormatter('%d/%m')
+        elif abs(int(time_delta.days)) < 32: # i.e., less than one month
+            locator = mdates.WeekdayLocator(interval=7)
+            formatter = mdates.DateFormatter('%d/%m')
+        elif abs(int(time_delta.days)) < 190: # i.e., less than six months
+            locator = mdates.MonthLocator()
+            formatter = mdates.DateFormatter('%m/%y')
+        else: # i.e., over six months (up to around 1 year, which is how much data we have)
+            locator = mdates.MonthLocator(interval=2)
+            formatter = mdates.DateFormatter('%m/%y')
+        axs[n].xaxis.set_major_formatter(formatter=formatter)
+        axs[n].xaxis.set_major_locator(locator=locator)
+
+        axs[n].grid(True,c='white',lw=0.5,alpha=0.5) #xaxis.
+
+        # vlines
+        if 'vlines' in kwargs:
+            if 'vlines_colour' in kwargs: c = kwargs['vlines_colour']
+            else: c = 'k' #(55/256, 167/256, 222/256) # AWI colour
+            for vline_date in kwargs['vlines']: 
+                axs[n].vlines(vline_date,-220,-50,colors=c) 
+        
+        # patches
+        if 'patches' in kwargs:
+            for patch in kwargs['patches']:
+                start_coords, width, height = patch
+                rect = ptcs.Rectangle(start_coords, width, height, fc="grey", ec='grey', alpha=0.3)
+                axs[n].add_patch(rect)
+
+        # Annotation
+        t = axs[n].text(0.035,0.095,titles[var],transform=axs[n].transAxes,fontsize=10)
+        t.set_bbox(dict(facecolor='white', alpha=0.5,lw =0, boxstyle='square,pad=0.1'))
+
+
+    axs[1].set_ylabel('Depth ($m$)',fontsize=10)
+    ax2.set_ylabel('Sea ice concentration ($\%$)', color=color, fontsize=10) 
+
+    fp = ('Figures/hovmollers/EGU_mooring_hovm_'+str(start_date.year)+str(start_date.month).zfill(2)+
+          str(start_date.day).zfill(2)+'-'+str(end_date.year)+str(end_date.month).zfill(2)+str(end_date.day).zfill(2)+'.png')
+    plt.savefig(fp,bbox_inches='tight',dpi=900)
+    print(fp)
+    #plt.savefig('Figures/Mooring_temperature_hovm_4x4_short2.pdf',format='pdf',bbox_inches='tight')
+
 if __name__=="__main__":   
     ds = open_mooring_ml_data(time_delta='hour')
     ds = correct_mooring_salinities(ds).isel(day=slice(0,-1,2))
-
+    '''
     start_date, end_date = datetime(2021,4,1,0,0,0), datetime(2022,3,31,0,0,0)
     vlines = [datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)]
     plt_hovm(ds, 'T', start_date, end_date, vlines=vlines)
@@ -519,3 +620,13 @@ if __name__=="__main__":
     plt_hovm(ds, 'T', start_date, end_date, patches=patches)
     plt_hovm(ds, 'SA', start_date, end_date, patches=patches)
     plt_hovm(ds, 'pot_rho', start_date, end_date, patches=patches)
+    '''
+
+    # EGU plot(s)
+    start_date, end_date = datetime(2021,4,1,0,0,0), datetime(2022,3,31,0,0,0)
+    vlines = [datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)]
+    plt_hovm_EGU(ds, start_date, end_date, vlines=vlines)
+    
+    start_date, end_date = datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)
+    patches = [((datetime(2021,9,13,21),-220), timedelta(hours=6), 170), ((datetime(2021,9,15,21),-220), timedelta(hours=6), 170)]
+    plt_hovm_EGU(ds, start_date, end_date, patches=patches)
