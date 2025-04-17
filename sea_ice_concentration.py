@@ -17,6 +17,7 @@ import matplotlib.ticker as mticker
 import time
 import geopandas as gpd
 from shapely.geometry import Point
+import matplotlib.path as mpath
 
 def download_data(date_str):
     """Credit for much of this function and the Bash script that it calls goes to copilot.
@@ -167,9 +168,56 @@ def select_nearest_coord(latitude, longitude):
     
     return id
 
+def map_of_ice_conc_EGU():
+    
+    # Create a list of all the files (which should already exist if you've run download_sequence_of_data())
+    with open('../filepaths/sea_ice_concentration') as f: dirpath = f.readlines()[0][:-1] # the [0] accesses the first line, and the [:-1] removes the newline tag
+    filepath = dirpath + '/sea_ice_concentration.nc'
+    ds = xr.open_dataset(filepath)
+
+    dateranges = [ ["20210401","20210701"], ["20210701","20211001"], ["20211001","20220101"], ["20220101","20220401"] ]
+    titles = [ ["Apr-Jun 2021"], ["Jul-Sep 2021"], ["Oct-Dec 2021"], ["Jan-Mar 2022"] ]
+
+    awi = [55/256, 167/256, 222/256]
+    lmu = [34/256,137/256,66/256]
+
+    plt.rcParams["font.family"] = "serif" # change the base font
+    f = plt.figure(figsize=(4,4)) #2,1,figsize=(4, 6),subplot_kw=dict(projection=projection)) 
+    land_50m = feature.NaturalEarthFeature('physical', 'land', '50m',edgecolor='black', facecolor='black') 
+    subplot_kw=dict(projection=ccrs.SouthPolarStereo())
+    for i in range(4):
+        ax = plt.subplot(2,2,i+1, **subplot_kw)
+        ax.add_feature(land_50m, color=awi)#[0.8, 0.8, 0.8])
+        ax.coastlines(resolution='50m')
+        ds2 = ds.sel(date=slice(datetime.strptime(dateranges[i][0],'%Y%m%d'),datetime.strptime(dateranges[i][1],'%Y%m%d'))).mean(dim='date')
+        da = ds2['ice_conc'].where(ds2['ice_conc']!=0).where(~np.isnan(ds['mask']))
+        c = ax.pcolormesh(da['lon'],da['lat'],da,cmap='Blues',transform=ccrs.PlateCarree())
+
+        # From: https://scitools.org.uk/cartopy/docs/v0.15/examples/always_circular_stereo.html
+        theta = np.linspace(0, 2*np.pi, 100)
+        center, radius = [0.5, 0.5], 0.5
+        verts = np.vstack([np.sin(theta), np.cos(theta)]).T
+        circle = mpath.Path(verts * radius + center)
+        ax.set_boundary(circle, transform=ax.transAxes)
+
+        ax.set_title(titles[i][0],fontsize=10,pad=-0.1)
+    
+        s = ax.scatter(-27.0048333, -69.0005000, s=35,c=awi,edgecolors='k',marker='*', linewidths=0.25, transform=ccrs.PlateCarree(), label='Mooring\n27.0° W\n69.0° S')        
+
+    f.subplots_adjust(bottom=0.2)
+    cbar_ax = f.add_axes([0.1, 0.15, 0.45, 0.02])
+    cbar = f.colorbar(c, cax=cbar_ax, orientation='horizontal')
+    cbar.ax.tick_params(labelsize=9)
+    cbar.ax.set_xlabel('Sea ice concentration ($\%$)',fontdict={'fontsize':'9'})
+
+    ax.legend(edgecolor='white', prop={'size': '9'}, handletextpad=0.08, bbox_to_anchor=[0.55, -0.3], loc='center')
+
+    plt.savefig('Figures/EGU_map.png',dpi=1200,bbox_inches='tight')
+    plt.close()
 
 if __name__=="__main__":
     #sea_ice_conc_nc('20210326', '20220501')
     #all_dates_str, all_dates = list_of_date_strs('20210425', '20220501')
     #for date_str in all_dates_str: map_of_ice_conc(date_str)
-    print(select_nearest_coord(longitude = -27.0048333, latitude = -69.0005000))
+    #print(select_nearest_coord(longitude = -27.0048333, latitude = -69.0005000))
+    map_of_ice_conc_EGU()
