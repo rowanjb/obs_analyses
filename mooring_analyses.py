@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import matplotlib.ticker as ticker
 import matplotlib.dates as mdates
 import matplotlib.patches as ptcs
+from matplotlib.colors import TwoSlopeNorm
 import scipy.io as spio
 import matplotlib.pyplot as plt 
 from sea_ice_concentration import select_nearest_coord
@@ -520,7 +521,8 @@ def plt_hovm_EGU(ds, start_date, end_date, **kwargs):
     depths = {'T': [-50, -90, -135, -170, -220], 'SA': [-50, -135, -220], 'pot_rho': [-50, -135, -220]}
     titles = {'T': 'Temperature', 'SA': 'Salinity', 'pot_rho': 'Potential\ndensity'}
     units = {'T': '$\degree C$', 'SA': '$PSU$', 'pot_rho': '$kg$ $m^{-3}$'}
-    lims = {'T': (-2,2), 'SA': (34.07, 34.91), 'pot_rho': (27.30, 27.87)}
+    lims = {'T': (-2,1), 'SA': (34.07, 34.91), 'pot_rho': (27.30, 27.87)}
+    lims_short = {'T': (-1.831,0.87), 'SA': (34.617, 34.878), 'pot_rho': (27.74, 27.832)}
     cm = {'T': 'coolwarm', 'SA': 'viridis', 'pot_rho': 'hot_r'}
 
     #== Plotting ==#
@@ -532,9 +534,10 @@ def plt_hovm_EGU(ds, start_date, end_date, **kwargs):
     for n in [0,2,1]: # We want this order for reasons
         var = vars[n]
         lower_lim, upper_lim = lims[var]
-        norm = plt.Normalize(lower_lim, upper_lim) # Mapping to the colourbar internal [0, 1]
+        if vars[n]=='T': norm = TwoSlopeNorm(0,lower_lim,upper_lim)
+        else: norm = plt.Normalize(lower_lim, upper_lim) # Mapping to the colourbar internal [0, 1]
         p = ds[var].sel(depth=depths[var]).plot.contourf('day','depth',ax=axs[n],levels=50,norm=norm,add_colorbar=False,cmap=plt.colormaps[cm[var]])
-        
+
         # Adding the sea ice data to the plot
         with open('../filepaths/sea_ice_concentration') as f: dirpath = f.readlines()[0][:-1] # the [0] accesses the first line, and the [:-1] removes the newline tag
         filepath = dirpath + '/sea_ice_concentration.nc'
@@ -608,6 +611,7 @@ def plt_hovm_EGU(ds, start_date, end_date, **kwargs):
 if __name__=="__main__":   
     ds = open_mooring_ml_data(time_delta='hour')
     ds = correct_mooring_salinities(ds).isel(day=slice(0,-1,2))
+
     '''
     start_date, end_date = datetime(2021,4,1,0,0,0), datetime(2022,3,31,0,0,0)
     vlines = [datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)]
@@ -627,6 +631,7 @@ if __name__=="__main__":
     vlines = [datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)]
     plt_hovm_EGU(ds, start_date, end_date, vlines=vlines)
     
-    start_date, end_date = datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)
-    patches = [((datetime(2021,9,13,21),-220), timedelta(hours=6), 170), ((datetime(2021,9,15,21),-220), timedelta(hours=6), 170)]
-    plt_hovm_EGU(ds, start_date, end_date, patches=patches)
+    #start_date, end_date = datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)
+    #ds = ds.sel(day=slice(start_date,end_date))
+    #patches = [((datetime(2021,9,13,21),-220), timedelta(hours=6), 170), ((datetime(2021,9,15,21),-220), timedelta(hours=6), 170)]
+    #plt_hovm_EGU(ds, start_date, end_date, patches=patches)
