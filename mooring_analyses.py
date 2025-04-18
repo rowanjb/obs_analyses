@@ -174,7 +174,7 @@ def correct_mooring_salinities(ds_mooring):
     print("Salinities corrected")
     return ds_mooring
 
-def fill_mooring_with_WOA(ds, season='autumn'):
+def fill_mooring_with_WOA(ds):
     """For filling in a len(1) in time mooring dataset with WOA climatologies.
     season is relative to the N.H.; default is autumn (S.H. spring)."""
 
@@ -203,10 +203,10 @@ def fill_mooring_with_WOA(ds, season='autumn'):
 
     # Opening the WOA data; seasons are ['winter', 'spring', 'summer', 'autumn'] (i.e., NORTHERN HEMISPHERE SEASONS!)
     with open('../filepaths/woa_filepath') as f: dirpath = f.readlines()[0][:-1] # the [0] accesses the first line, and the [:-1] removes the newline tag
-    das = xr.open_dataset(dirpath + '/WOA_seasonally_'+'s'+'_'+str(2015)+'.nc',decode_times=False)['s_an']
-    s_woa = das.isel(time=2).interp(depth=z) # time=2 refers to "summer"
-    dat = xr.open_dataset(dirpath + '/WOA_seasonally_'+'t'+'_'+str(2015)+'.nc',decode_times=False)['t_an']
-    t_woa = dat.isel(time=2).interp(depth=z) # time=2 refers to "summer"
+    das = xr.open_dataset(dirpath + '/WOA_monthly_'+'s'+'_'+str(2015)+'.nc',decode_times=False)['s_an']
+    s_woa = das.isel(time=8).interp(depth=z) # time=2 refers to "summer"
+    dat = xr.open_dataset(dirpath + '/WOA_monthly_'+'t'+'_'+str(2015)+'.nc',decode_times=False)['t_an']
+    t_woa = dat.isel(time=8).interp(depth=z) # time=2 refers to "summer"
     p = gsw.p_from_z((-1)*z,lat=-69.0005) # Calculating pressure from depth, then getting absolute salinity, and potential temperature 
     SA = gsw.SA_from_SP(s_woa,p,lat=-69.0005,lon=-27.0048)           # ...(you should want theta/pt---this is what the model demands!)
     pt = gsw.pt0_from_t(SA,t_woa,p)
@@ -215,7 +215,7 @@ def fill_mooring_with_WOA(ds, season='autumn'):
     if pot_temp: # If potential temp is what we're looking for, then...
         dst = gsw.pt0_from_t(ds['SA'],ds['T'],ds['p_from_z']).values # Let t (mooring) be potential temperature
         t_woa = pt # Let t (WOA) now be potential temperature 
-        t_name = 'theta' # Let the var name in the file be theta
+        t_name = 'pt' # Let the var name in the file be theta
     else: # i.e., if we /don't/ want potential temp, we will use in-situ
         dst = ds['T'].values 
         t_name = 'T'
@@ -261,8 +261,6 @@ def fill_mooring_with_WOA(ds, season='autumn'):
     # Creating an xr dataset
     ds_filled = xr.Dataset(
         data_vars=dict(
-            T=(["z"], t),
-            S=(["z"], s),
             dz=(["z"], dz),
         ),
         coords=dict(
@@ -270,6 +268,16 @@ def fill_mooring_with_WOA(ds, season='autumn'):
         ),
         attrs=dict(description="Mooring data, filled with WOA climatologies and at the model's vertical resolution"),
     )
+
+    # Determining which salt and temp to use
+    if pot_temp: # If potential temp is what we're looking for, then...
+        ds_filled = ds_filled.assign(pt=(["z"], t))
+    else: # i.e., if we /don't/ want potential temp, we will use in-situ
+        ds_filled = ds_filled.assign(T=(["z"], t))
+    if abs_salt: # Similarly, if it is absolute salinity that we're looking for, then...
+        ds_filled = ds_filled.assign(SA=(["z"], t))
+    else: # i.e., if we /don't/ want absolute salinity, then we likely want PSU
+        ds_filled = ds_filled.assign(pt=(["S"], t))
 
     return ds_filled
 
@@ -583,7 +591,7 @@ def plt_hovm_EGU(ds, start_date, end_date, **kwargs):
         # vlines
         if 'vlines' in kwargs:
             if 'vlines_colour' in kwargs: c = kwargs['vlines_colour']
-            else: c = 'k' #(55/256, 167/256, 222/256) # AWI colour
+            else: c = 'black' #(55/256, 167/256, 222/256) # AWI colour
             for vline_date in kwargs['vlines']: 
                 axs[n].vlines(vline_date,-220,-50,colors=c) 
         
@@ -611,6 +619,7 @@ def plt_hovm_EGU(ds, start_date, end_date, **kwargs):
 if __name__=="__main__":   
     ds = open_mooring_ml_data(time_delta='hour')
     ds = correct_mooring_salinities(ds).isel(day=slice(0,-1,2))
+    print(fill_mooring_with_WOA(ds.sel(day=slice(datetime(2021,9,13,21),datetime(2021,9,14,3))).mean(dim='day')))
 
     '''
     start_date, end_date = datetime(2021,4,1,0,0,0), datetime(2022,3,31,0,0,0)
@@ -627,9 +636,9 @@ if __name__=="__main__":
     '''
 
     # EGU plot(s)
-    start_date, end_date = datetime(2021,4,1,0,0,0), datetime(2022,3,31,0,0,0)
-    vlines = [datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)]
-    plt_hovm_EGU(ds, start_date, end_date, vlines=vlines)
+    #start_date, end_date = datetime(2021,4,1,0,0,0), datetime(2022,3,31,0,0,0)
+    #vlines = [datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)]
+    #plt_hovm_EGU(ds, start_date, end_date, vlines=vlines)
     
     #start_date, end_date = datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)
     #ds = ds.sel(day=slice(start_date,end_date))
