@@ -96,7 +96,7 @@ def open_mooring_ml_data(time_delta='day'):
         ),
         coords=dict(
             day=new_datetime_coords,
-            depth=[-50,-90,-135,-170,-220,-250],
+            depth=[-50,-90,-125,-170,-220,-250],
         ),
         attrs=dict(description="Mooring data..."),
     )
@@ -119,7 +119,7 @@ def correct_mooring_salinities(ds_mooring):
     # Calculate the mean salinites at the two "bad sensors"
     S = ds_mooring['S'] # Extract as a dataarray for easy handling
     S_srfce_mean_mooring = S.sel(depth=-50).mean(dim='day').values
-    S_upper_mean_mooring = S.sel(depth=-135).mean(dim='day').values
+    S_upper_mean_mooring = S.sel(depth=-125).mean(dim='day').values
     S_lower_mean_mooring = S.sel(depth=-220).mean(dim='day').values
 
     # Open the WOA data
@@ -141,7 +141,7 @@ def correct_mooring_salinities(ds_mooring):
     '''
 
     S_srfce_mean_woa = woa_weighted_mean.interp(depth=50).values
-    S_upper_mean_woa = woa_weighted_mean.interp(depth=135).values
+    S_upper_mean_woa = woa_weighted_mean.interp(depth=125).values
     S_lower_mean_woa = woa_weighted_mean.interp(depth=220).values
 
     print(" 50 m 12-month mean from mooring: "+str(S_srfce_mean_mooring))
@@ -149,8 +149,8 @@ def correct_mooring_salinities(ds_mooring):
     S_srfce_mean_anomaly = S_srfce_mean_mooring-S_srfce_mean_woa
     print("Difference: "+str(S_srfce_mean_anomaly))
     print('')
-    print("135 m 12-month mean from mooring: "+str(S_upper_mean_mooring))
-    print("135 m 12-month mean from WOA:     "+str(S_upper_mean_woa))
+    print("125 m 12-month mean from mooring: "+str(S_upper_mean_mooring))
+    print("125 m 12-month mean from WOA:     "+str(S_upper_mean_woa))
     S_upper_mean_anomaly = S_upper_mean_mooring-S_upper_mean_woa
     print("Difference: "+str(S_upper_mean_anomaly))
     print('')
@@ -161,7 +161,7 @@ def correct_mooring_salinities(ds_mooring):
 
     # Correcting the salinities
     S = xr.where(S['depth']==-50,S.sel(depth=-50) - S_srfce_mean_anomaly,S)
-    S = xr.where(S['depth']==-135,S.sel(depth=-135) - S_upper_mean_anomaly,S)
+    S = xr.where(S['depth']==-125,S.sel(depth=-125) - S_upper_mean_anomaly,S)
     S = xr.where(S['depth']==-220,S.sel(depth=-220) - S_lower_mean_anomaly,S)
     ds_mooring['S'] = S # Reassign the corrected values
     ##print(ds_mooring)
@@ -229,7 +229,7 @@ def fill_mooring_with_WOA(ds):
     
     # Finding depth threshold indices, i.e., where in the model depths do mooring data apply
     id50  = np.where(z == np.min(z[z>50]) )
-    id135 = np.where(z == np.min(z[z>135]) )
+    id135 = np.where(z == np.min(z[z>125]) )
     id220 = np.where(z == np.min(z[z>220]) )
 
     # Interpolating/filling values
@@ -240,16 +240,16 @@ def fill_mooring_with_WOA(ds):
             mean_diff_t = dst[0] - t_woa[id50]
             s[n] = s_woa[n] + mean_diff_s
             t[n] = t_woa[n] + mean_diff_t
-        elif d<135:
+        elif d<125:
             del_s = dss[1] - dss[0]
             del_t = dst[1] - dst[0]
-            weight = (d-50)/(135-50)
+            weight = (d-50)/(125-50)
             s[n] = dss[0] + del_s*weight
             t[n] = dst[0] + del_t*weight
         elif d<220:
             del_s = dss[2] - dss[1]
             del_t = dst[2] - dst[1]
-            weight = (d-135)/(220-135)
+            weight = (d-125)/(220-125)
             s[n] = dss[1] + del_s*weight
             t[n] = dst[1] + del_t*weight
         else:
@@ -275,9 +275,9 @@ def fill_mooring_with_WOA(ds):
     else: # i.e., if we /don't/ want potential temp, we will use in-situ
         ds_filled = ds_filled.assign(T=(["z"], t))
     if abs_salt: # Similarly, if it is absolute salinity that we're looking for, then...
-        ds_filled = ds_filled.assign(SA=(["z"], t))
+        ds_filled = ds_filled.assign(SA=(["z"], s))
     else: # i.e., if we /don't/ want absolute salinity, then we likely want PSU
-        ds_filled = ds_filled.assign(pt=(["S"], t))
+        ds_filled = ds_filled.assign(S=(["z"], s))
 
     return ds_filled
 
@@ -317,7 +317,7 @@ def open_mooring_profiles_data():
         ),
         coords=dict(
             day=new_datetime_coords,
-            depth=[-50,-90,-135,-170,-220,-250],
+            depth=[-50,-90,-125,-170,-220,-250],
         ),
         attrs=dict(description="Mooring data..."),
     )
@@ -432,7 +432,7 @@ def plt_hovm(ds, var, start_date, end_date, **kwargs):
             E.g., [((datetime(2021,9,13,21),-220), timedelta(hours=6), 170)]"""
 
     # Some var-specific definitions
-    depths = {'T': [-50, -90, -135, -170, -220], 'SA': [-50, -135, -220], 'pot_rho': [-50, -135, -220]}
+    depths = {'T': [-50, -90, -125, -170, -220], 'SA': [-50, -125, -220], 'pot_rho': [-50, -125, -220]}
     titles = {'T': 'Temperature ($\degree C$)', 'SA': 'Salinity ($PSU$)', 'pot_rho': 'Potential density ($kg$ $m^{-3}$)'}
     lims = {'T': (-2,2), 'SA': (34.07, 34.91), 'pot_rho': (27.30, 27.87)}
     cm = {'T': 'coolwarm', 'SA': 'viridis', 'pot_rho': 'hot_r'}
@@ -526,7 +526,7 @@ def plt_hovm_EGU(ds, start_date, end_date, **kwargs):
             E.g., [((datetime(2021,9,13,21),-220), timedelta(hours=6), 170)]"""
 
     # Some var-specific definitions
-    depths = {'T': [-50, -90, -135, -170, -220], 'SA': [-50, -135, -220], 'pot_rho': [-50, -135, -220]}
+    depths = {'T': [-50, -90, -125, -170, -220], 'SA': [-50, -125, -220], 'pot_rho': [-50, -125, -220]}
     titles = {'T': 'Temperature', 'SA': 'Salinity', 'pot_rho': 'Potential\ndensity'}
     units = {'T': '$\degree C$', 'SA': '$PSU$', 'pot_rho': '$kg$ $m^{-3}$'}
     lims = {'T': (-2,1), 'SA': (34.07, 34.91), 'pot_rho': (27.30, 27.87)}
