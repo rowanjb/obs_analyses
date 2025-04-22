@@ -527,10 +527,10 @@ def plt_hovm_EGU(ds, start_date, end_date, **kwargs):
 
     # Some var-specific definitions
     depths = {'T': [-50, -90, -125, -170, -220], 'SA': [-50, -125, -220], 'pot_rho': [-50, -125, -220]}
-    titles = {'T': 'Temperature', 'SA': 'Salinity', 'pot_rho': 'Potential\ndensity'}
+    titles = {'T': 'In-situ\ntemperature', 'SA': 'Absolute\nsalinity', 'pot_rho': 'Potential\ndensity'}
     units = {'T': '$\degree C$', 'SA': '$PSU$', 'pot_rho': '$kg$ $m^{-3}$'}
     lims = {'T': (-2,1), 'SA': (34.07, 34.91), 'pot_rho': (27.30, 27.87)}
-    lims_short = {'T': (-1.831,0.87), 'SA': (34.617, 34.878), 'pot_rho': (27.74, 27.832)}
+    lims_short = {'T': (-1.831,0.87), 'SA': (34.6, 34.878), 'pot_rho': (27.719, 27.832)}
     cm = {'T': 'coolwarm', 'SA': 'viridis', 'pot_rho': 'hot_r'}
 
     #== Plotting ==#
@@ -541,7 +541,7 @@ def plt_hovm_EGU(ds, start_date, end_date, **kwargs):
     vars = ['T','SA','pot_rho']
     for n in [0,2,1]: # We want this order for reasons
         var = vars[n]
-        lower_lim, upper_lim = lims[var]
+        lower_lim, upper_lim = lims_short[var]
         if vars[n]=='T': norm = TwoSlopeNorm(0,lower_lim,upper_lim)
         else: norm = plt.Normalize(lower_lim, upper_lim) # Mapping to the colourbar internal [0, 1]
         p = ds[var].sel(depth=depths[var]).plot.contourf('day','depth',ax=axs[n],levels=50,norm=norm,add_colorbar=False,cmap=plt.colormaps[cm[var]])
@@ -558,7 +558,7 @@ def plt_hovm_EGU(ds, start_date, end_date, **kwargs):
         ax2.plot(ds_si['date'], ds_si['ice_conc'][:,0,0], color=color, linewidth=1)
         ax2.tick_params(axis='y', labelcolor=color, labelsize=9)
         
-        cbar = plt.colorbar(p, orientation="vertical")#, label='Temperature ($\degree C$)')
+        cbar = plt.colorbar(p, orientation="vertical",format=ticker.FormatStrFormatter('%.2f'))#, label='Temperature ($\degree C$)')
         cbar.set_label(units[var], rotation=90, fontsize=9)
         cbar.ax.tick_params(labelsize=9)
         cbar.ax.set_ylim(lower_lim, upper_lim)
@@ -619,7 +619,7 @@ def plt_hovm_EGU(ds, start_date, end_date, **kwargs):
 if __name__=="__main__":   
     ds = open_mooring_ml_data(time_delta='hour')
     ds = correct_mooring_salinities(ds).isel(day=slice(0,-1,2))
-    print(fill_mooring_with_WOA(ds.sel(day=slice(datetime(2021,9,13,21),datetime(2021,9,14,3))).mean(dim='day')))
+    #print(fill_mooring_with_WOA(ds.sel(day=slice(datetime(2021,9,13,21),datetime(2021,9,14,3))).mean(dim='day')))
 
     '''
     start_date, end_date = datetime(2021,4,1,0,0,0), datetime(2022,3,31,0,0,0)
@@ -636,11 +636,11 @@ if __name__=="__main__":
     '''
 
     # EGU plot(s)
-    #start_date, end_date = datetime(2021,4,1,0,0,0), datetime(2022,3,31,0,0,0)
-    #vlines = [datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)]
-    #plt_hovm_EGU(ds, start_date, end_date, vlines=vlines)
+    start_date, end_date = datetime(2021,4,1,0,0,0), datetime(2022,3,31,0,0,0)
+    vlines = [datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)]
+    plt_hovm_EGU(ds, start_date, end_date, vlines=vlines)
     
-    #start_date, end_date = datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)
-    #ds = ds.sel(day=slice(start_date,end_date))
-    #patches = [((datetime(2021,9,13,21),-220), timedelta(hours=6), 170), ((datetime(2021,9,15,21),-220), timedelta(hours=6), 170)]
-    #plt_hovm_EGU(ds, start_date, end_date, patches=patches)
+    start_date, end_date = datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)
+    ds = ds.sel(day=slice(start_date,end_date))
+    patches = [((datetime(2021,9,12,21),-220), timedelta(hours=6), 170), ((datetime(2021,9,15,21),-220), timedelta(hours=6), 170)]
+    plt_hovm_EGU(ds, start_date, end_date, patches=patches)
