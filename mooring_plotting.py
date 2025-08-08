@@ -562,7 +562,7 @@ if __name__=="__main__":
     ds = ma.open_mooring_data().convert_to_daily()
     ds.append_gsw_vars()
     ds_CTD = ma.open_mooring_profiles_data()
-    compare_CTD_cast_and_mooring(ds, ds_CTD)
+    #compare_CTD_cast_and_mooring(ds, ds_CTD)
     #ds = ma.correct_mooring_salinities(ds)
     #start_date, end_date = datetime(2021,4,1,0,0,0), datetime(2022,4,1,0,0,0)
     #mooring_TS(ds, start_date, end_date)

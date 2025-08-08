@@ -309,8 +309,10 @@ def open_mooring_data():
             )
             df = df.set_index('dates') 
             df = df[
-                (df.index>'2021-03-25 00:00:00') &
-                (df.index<'2022-04-07 14:00:00')
+                (df.index>'2021-04-01 00:00:00') &
+                (df.index<'2022-04-01 14:00:00')
+                #(df.index>'2021-03-25 00:00:00') &
+                #(df.index<'2022-04-07 14:00:00')
             ]
 
             # Use the very nice pandas resample method
