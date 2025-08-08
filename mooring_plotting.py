@@ -480,11 +480,89 @@ def contents(ds, start_date, end_date, window=24, dt=False):
 
     plt.savefig(file_name,dpi=1200)
 
-def compare_CTD_cast_and_mooring():
-    
+def compare_CTD_cast_and_mooring(ds_mooring, ds_CTD):
+    """Plot two column figure of T and S from start and end of mooring
+    time series versus the launch and pickup cruise CTD casts."""
+
+    fig, [ax1, ax2] = plt.subplots(ncols=2,nrows=1)
+
+    # Getting the dates used in the plots
+    mooring_start_id, mooring_end_id = 0,-2 #15, -15
+    mooring_start_time = ds_mooring['time'].isel(time=mooring_start_id).values
+    mooring_end_time = ds_mooring['time'].isel(time=mooring_end_id).values
+    CTD_start_time = ds_CTD['datetime'].isel(datetime=0).values
+    CTD_end_time = ds_CTD['datetime'].isel(datetime=-1).values   
+
+    # Plotting the start mooring points
+    mts = ax1.scatter(ds_mooring['T'].isel(time=15),ds_mooring['p_from_z'],
+                      c='k',label='Mooring temperature start')
+    mss = ax2.scatter(ds_mooring['S'].isel(time=15),ds_mooring['p_from_z'],
+                      c='k',label='Mooring salinity start')
+
+    # Plotting the end mooring points
+    mte = ax1.scatter(ds_mooring['T'].isel(time=-15),ds_mooring['p_from_z'],
+                      c='r',label='Mooring temperature end')
+    mse = ax2.scatter(ds_mooring['S'].isel(time=-15),ds_mooring['p_from_z'],
+                      c='r',label='Mooring salinity end')
+
+    # Plotting the first CTD cast
+    ctdts, = ax1.plot(ds_CTD['T'].isel(datetime=0),ds_CTD['P'],
+                      c='k',label='CTD temperature start')
+    ctdss, = ax2.plot(ds_CTD['S'].isel(datetime=0),ds_CTD['P'],
+                      c='k',label='CTD salinity start')
+
+    # Plotting the second CTD cast
+    ctdte, = ax1.plot(ds_CTD['T'].isel(datetime=-1),ds_CTD['P'],
+                      c='r',label='CTD temperature end')
+    ctdse, = ax2.plot(ds_CTD['S'].isel(datetime=-1),ds_CTD['P'],
+                      c='r',label="CTD salinity end")
+
+    ax1.invert_yaxis()
+    ax2.invert_yaxis()
+
+    leg1 = ax1.legend(
+        [mts,mte],
+        [str(mooring_start_time)[:10],
+         str(mooring_end_time)[:10]],
+        title="Mooring\n(resampled daily)",
+        fontsize='small',
+        framealpha=0,
+        title_fontsize='small',
+        loc="lower left",
+    )
+
+    leg2 = ax1.legend(
+        [ctdss,ctdse],
+        ['PS124 ('+str(CTD_start_time)[:10]+')',
+         'PS129: ('+str(CTD_end_time)[:10]+')'],
+        title="CTD casts\n(launch and pick up)",
+        fontsize='small',
+        framealpha=0,
+        title_fontsize='small',
+        loc="center left",
+        bbox_to_anchor = [0, 0.3]
+    )
+
+    leg1._legend_box.align = "left"
+    leg2._legend_box.align = "left"
+
+    ax1.add_artist(leg1)
+    ax1.add_artist(leg2)
+
+    plt.suptitle("Mooring instruments vs CTD casts")
+    ax1.set_title("Temperature")
+    ax2.set_title("Salinity")
+    ax1.set_xlabel("In situ temperature ($℃$)")
+    ax1.set_ylabel("Pressure ($dbar$)")
+    ax2.set_xlabel("Practical salinity ($PSU$)")
+
+    plt.savefig('mooring_vs_CTD.png',dpi=600)
 
 if __name__=="__main__":   
-    ds = ma.open_mooring_ml_data()
+    ds = ma.open_mooring_data().convert_to_daily()
+    ds.append_gsw_vars()
+    ds_CTD = ma.open_mooring_profiles_data()
+    compare_CTD_cast_and_mooring(ds, ds_CTD)
     #ds = ma.correct_mooring_salinities(ds)
     #start_date, end_date = datetime(2021,4,1,0,0,0), datetime(2022,4,1,0,0,0)
     #mooring_TS(ds, start_date, end_date)
@@ -494,5 +572,3 @@ if __name__=="__main__":
     #start_date, end_date = datetime(2021,8,1,0,0,0), datetime(2022,1,5,0,0,0)
     #for w in [  1,  3,  6, 12, 24, 48, 96,192,384]:
     #    contents(ds, start_date, end_date, window=w, dt=False)
-
-    compare_CTD_cast_and_mooring()

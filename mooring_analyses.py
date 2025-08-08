@@ -23,7 +23,7 @@ class mooring_ds(xr.Dataset):
         corrects salinities using WOA climatologies
     convert_to_daily()
         converts the time delta to daily from the defaults 2 hours
-    add_gsw_vars()
+    append_gsw_vars()
         adds gsw variables like SA, pt, etc.
 
     Note to self: add ability to use WOA or CTD casts for filling and 
@@ -90,9 +90,12 @@ class mooring_ds(xr.Dataset):
         """Resamples the 2-hourly data to daily"""
         # Obviously this is very simple but I'm always forgetting the 
         # .resample syntax
+        print("Resampling to daily")
         self = self.resample(time='D').mean()
+        print("Done resampling to daily")
+        return self
         
-    def add_gsw_vars(self, pref=0):
+    def append_gsw_vars(self, pref=0):
         """Adds gsw variables like absolute salinity (SA), conservative
         temperature (CT), pressure calculated from nominal depth (P), and 
         potential temperature (pt). 
@@ -102,12 +105,14 @@ class mooring_ds(xr.Dataset):
             pref : int, default 0
                 reference pressure used in calculating potential density
         """
+        print("Adding GSW variables to the mooring time series")
         lon, lat = -27.0048, -69.0005
         self['p_from_z'] = gsw.p_from_z(self['depth'],lat)
         self['SA'] = gsw.SA_from_SP(self['S'],self['p_from_z'],lon,lat)
         self['CT'] = gsw.CT_from_t(self['SA'],self['T'],self['p_from_z'])
         self['pt'] = gsw.pt_from_t(self['SA'],self['T'],self['p_from_z'],pref)
         self['pt'].attrs['reference pressure [dbar]'] = pref
+        print("GSW variables added to the mooring time series")
 
 def open_mooring_profiles_data():
     """
@@ -220,7 +225,7 @@ def open_mooring_profiles_data():
         ]   
         return var 
     def make_coords(coord):
-        return [ds_124[coord].values, ds_124[coord].values]
+        return [ds_124[coord].values, ds_129[coord].values]
     def make_attrs(attr):
         return 'PS124: '+ds_124.attrs[attr]+' PS129: '+ds_129.attrs[attr]
     ds = xr.Dataset(
@@ -304,9 +309,8 @@ def open_mooring_data():
             )
             df = df.set_index('dates') 
             df = df[
-                (df.index>'2021-04-01 00:00:00') &
-                #(df.index<'2022-04-01 01:00:00')
-                (df.index<'2021-04-10 01:00:00')
+                (df.index>'2021-03-25 00:00:00') &
+                (df.index<'2022-04-07 14:00:00')
             ]
 
             # Use the very nice pandas resample method
@@ -347,5 +351,5 @@ if __name__=="__main__":
     #ds.correct_mooring_salinities()
     #ds.fill_mooring()
     #ds.convert_to_daily()
-    #ds.add_gsw_vars()
+    #ds.append_gsw_vars()
     #ds = open_mooring_profiles_data()
