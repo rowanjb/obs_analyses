@@ -8,18 +8,8 @@ import pandas as pd
 import numpy as np
 import gsw
 from datetime import datetime, timedelta
-import matplotlib.ticker as ticker
-import matplotlib.dates as mdates
-import matplotlib.patches as ptcs
-from matplotlib.colors import TwoSlopeNorm
 import scipy.io as spio
 import matplotlib.pyplot as plt 
-from sea_ice_concentration import select_nearest_coord
-from typing import Literal
-
-import sys
-sys.path.insert(1, '../model_analyses/')
-import cell_thickness_calculator as ctc
 
 class mooring_ds(xr.Dataset):
     """
@@ -31,13 +21,17 @@ class mooring_ds(xr.Dataset):
     --------
     correct_mooring_salinities()
         corrects salinities using WOA climatologies
-    fill_mooring()
-        populates the datasets in depth using WOA climatoloties
+    convert_to_daily()
+        converts the time delta to daily from the defaults 2 hours
+    add_gsw_vars()
+        adds gsw variables like SA, pt, etc.
 
     Note to self: add ability to use WOA or CTD casts for filling and 
-    correcting. Also add convert to daily and add SA, PT, etc. methods
+    correcting
     """
+
     __slots__ = () # Note to self: Add attributes here
+
     def correct_mooring_salinities(self):
         """
         The salinities from the lower two sensors seem, basically, wrong.
@@ -91,144 +85,170 @@ class mooring_ds(xr.Dataset):
         self['S'] = S.transpose('time','depth')
         
         print("Mooring data corrected")
-
-    def fill_mooring(self):
+    
+    def convert_to_daily(self):
+        """Resamples the 2-hourly data to daily"""
+        # Obviously this is very simple but I'm always forgetting the 
+        # .resample syntax
+        self = self.resample(time='D').mean()
+        
+    def add_gsw_vars(self, pref=0):
+        """Adds gsw variables like absolute salinity (SA), conservative
+        temperature (CT), pressure calculated from nominal depth (P), and 
+        potential temperature (pt). 
+        
+        Parameters
+        --------
+            pref : int, default 0
+                reference pressure used in calculating potential density
         """
-        For filling in the mooring dataset S and T by adding 
-        depth levels. Currently uses WOA climatology data but in the 
-        future might I start using CTD casts.
-        Note season is relative to the N.H., so the default is 
-        autumn (i.e., Southern Hemisphere spring).
-        
-        For info on WOA data, see:
-        WORLD OCEAN ATLAS 2023
-        Product Documentation
-        """
+        lon, lat = -27.0048, -69.0005
+        self['p_from_z'] = gsw.p_from_z(self['depth'],lat)
+        self['SA'] = gsw.SA_from_SP(self['S'],self['p_from_z'],lon,lat)
+        self['CT'] = gsw.CT_from_t(self['SA'],self['T'],self['p_from_z'])
+        self['pt'] = gsw.pt_from_t(self['SA'],self['T'],self['p_from_z'],pref)
+        self['pt'].attrs['reference pressure [dbar]'] = pref
 
-        print("Beginning to fill the mooring data in the vertical")
-
-        # Calculating thickness levels
-        # You can change some of these parameters if desired
-        # But these are the values that I've used in the model
-        depth = 500 # Model grid depth
-        num_levels = 10 #50 # Grid size
-        x1, x2 = 1, num_levels # Indices of top and bottom cells
-        fx1 = 1 # Depth of bottom of top cell
-        min_slope = 1 # Minimum slope (should probably > x1)
-        A, B, C, _, _ = ctc.find_parameters(x1,x2,fx1,depth,min_slope)
-        dz = ctc.return_cell_thicknesses(x1,x2,depth,A,B,C) 
-
-        # Depths used in the model (calc'd to the centre of the cells)
-        z = np.zeros(len(dz))
-        for i,n in enumerate(dz):
-            if i==0: z[i] = n/2
-            else: z[i] = np.sum(dz[:i]) + n/2
-
-        # Opening the WOA data (seasons are ref'd to the N.H.
-        # e.g., ['winter', 'spring', 'summer', 'autumn'] 
-        with open('../filepaths/woa_filepath') as f: 
-            dirpath = f.readlines()[0][:-1] # 
-        das = xr.open_dataset(
-            dirpath + '/WOA_monthly_'+'s'+'_'+str(2015)+'.nc',
-            decode_times=False
-        )
-        das = das['s_an'] # s_an is practical salinity
-        dat = xr.open_dataset(
-            dirpath + '/WOA_monthly_'+'t'+'_'+str(2015)+'.nc',
-            decode_times=False
-        )
-        dat = dat['t_an'] # in situ, see: https://catalog.data.gov...
-        # /dataset/world-ocean-atlas-2023?utm_source=chatgpt.com
-        woa_month_dict = {'August': 8, 'September': 9, 'October': 10}
-        s_woa = das.isel(time=woa_month_dict['September']).interp(depth=z)
-        t_woa = dat.isel(time=woa_month_dict['September']).interp(depth=z) 
-        
-        self["z"] = z
-        empty_filled_arr = np.empty((len(self['time']),len(z)))
-        self["S_filled"] = (("time", "z"), empty_filled_arr)
-        self["T_filled"] = (("time", "z"), empty_filled_arr)
-        self["S_woa"] = (("z"), s_woa.data)
-        self["T_woa"] = (("z"), t_woa.data)
-        self["S_shift"] = self["S_woa"].interp(z=10.111) - self["S"]
-        self["T_shift"] = self["T_woa"].interp(z=10.111) - self["T"]
-        
-        print(self)
-        quit()
-
-        for n,d in enumerate(z):
-            
-            if d<50: 
-                mean_diff_s = dss[0] - s_woa[id50]
-                mean_diff_t = dst[0] - t_woa[id50]
-                s[n] = s_woa[n] + mean_diff_s
-                t[n] = t_woa[n] + mean_diff_t
-            elif d<125:
-                del_s = dss[1] - dss[0]
-                del_t = dst[1] - dst[0]
-                weight = (d-50)/(125-50)
-                s[n] = dss[0] + del_s*weight
-                t[n] = dst[0] + del_t*weight
-            elif d<220:
-                del_s = dss[2] - dss[1]
-                del_t = dst[2] - dst[1]
-                weight = (d-125)/(220-125)
-                s[n] = dss[1] + del_s*weight
-                t[n] = dst[1] + del_t*weight
-            else:
-                mean_diff_s = dss[2] - s_woa[id220]
-                mean_diff_t = dst[2] - t_woa[id220]
-                s[n] = s_woa[n] + mean_diff_s
-                t[n] = t_woa[n] + mean_diff_t
-            
 def open_mooring_profiles_data():
-    """Opens CTD data from profiles taken during the mooring launch/pickup cruises.
+    """
+    Opens CTD data from profiles taken during the mooring launch/pickup cruises.
     Work in progress...
     Use this to "correct" instead of WOA?
     """
 
-    # getting part of the file path, which is saved in a text file to avoid publishing it to GitHub
-    # the [0] accesses the first line, and the [:-1] removes the newline tag
-    with open('../filepaths/mooring_filepath') as f: dirpath = f.readlines()[0][:-1] 
+    print("Beginning to open the CTD data")
     
-    # creating the full filepaths to the .mat files
-    filepath_117_1 = dirpath + '/CTD/Profiles/117_1.mat'
-    filepath_dPS129_072_01 = dirpath + '/CTD/Profiles/dPS129_072_01.mat'
+    # This function requires the matlab engine package, installed using
+    # python -m pip install matlabengine==9.13.1
+    # Requires MATLAB/R2022b and gcc/12.1.0 to be loaded
+    try:
+        import matlab.engine
+        eng = matlab.engine.start_matlab()
+    except:
+        print("Failed to import matlab.engine")
+        print("Check that you have loaded the following environment modules:")
+        print("MATLAB/R2022b")
+        print("gcc/12.1.0")
+        quit()
 
-    # opening the .mat files
-    mat_124 = spio.loadmat(filepath_117_1)['S']
-    mat_129 = spio.loadmat(filepath_dPS129_072_01)
-
-    # extracting metadata
-    cruise_124, lat_124, lon_124, date_124 = mat_124['CRUISE'][0][0][0], mat_124['LAT'][0][0][0][0], mat_124['LON'][0][0][0][0], mat_124['DATETIME'][0][0][0]
-    cruise_129, lat_129, lon_129, date_129 = mat_129['HDR']['CRUISE'][0][0][0], mat_129['HDR']['LAT'][0][0][0][0], mat_129['HDR']['LON'][0][0][0][0], mat_129['HDR']['DATETIME'][0][0][0]
+    # File path is saved in a text file to avoid publishing it to GitHub
+    with open('../filepaths/mooring_filepath') as f: 
+        dirpath = f.readlines()[0][:-1] 
     
-    unnest = lambda mat : [i[0] for i in mat]
+    # Creating the full filepaths to the .mat files
+    filepaths = {
+        '124': dirpath + '/CTD/Profiles/117_1.mat',
+        '129': dirpath + '/CTD/Profiles/dPS129_072_01.mat',
+    }
 
-    # extracting the hydro data 
-    pres_124  = unnest(mat_124['PRES'][0][0])
-    print(pres_124)
-    quit()
-
-    # creating an xarray dataset
-    ds = xr.Dataset(
+    #== PS124 ==#
+    # Need different approaches for each cruise because diff data struct
+    # fieldnames_124 = eng.fieldnames(CTD_124) # Example usage
+    eng.workspace['CTD_124'] = eng.load(filepaths['124'])
+    CTD_124 = eng.workspace['CTD_124']['S']
+    unpack_var = lambda var : [i[0] for i in eng.getfield(CTD_124, var)]
+    ds_124 = xr.Dataset(
         data_vars=dict(
-            T=(["day","depth"], daily_avg_mooring_data(T)),
-            S=(["day","depth"], daily_avg_mooring_data(S)),
-            P=(["day","depth"], daily_avg_mooring_data(P)),
+            T=(["P"], unpack_var('TEMP'),{'units':'deg C'}),
+            S=(["P"], unpack_var('SALT'),{'units':'PSU'}),
         ),
         coords=dict(
-            time=new_datetime_coords,
-            depth=[-50,-90,-125,-170,-220,-250],
+            P=(["P"], unpack_var('PRES'),{'units':'dbar'}),
+            datetime=pd.to_datetime(eng.getfield(CTD_124, 'DATETIME')),
+            lon=(eng.getfield(CTD_124, 'LON')),
+            lat=(eng.getfield(CTD_124, 'LAT')),
         ),
-        attrs=dict(description="Mooring data..."),
+        attrs=dict(
+            description="CTD data for cruise PS124",
+            institute=(eng.getfield(CTD_124,'INSTITUTE')),
+            institute_country=(eng.getfield(CTD_124,'INST_COUNTRY')),
+            instrument=(eng.getfield(CTD_124,'INSTRUMENT')),
+            instrument_serial_number=(eng.getfield(CTD_124,'SN')),
+            ship=(eng.getfield(CTD_124,'Ship')),
+            cruise=(eng.getfield(CTD_124,'CRUISE')),
+            station=(eng.getfield(CTD_124,'STATION ')),
+            water_depth=(str(eng.getfield(CTD_124,'WATERDEPTH'))),
+            ),
     )
 
-    #THIS SHOULD USE SA NOT S
-    #ds = ds.assign_coords(p_from_z=gsw.p_from_z(ds['depth'],-69.0005))
-    #ds['pot_rho'] = gsw.pot_rho_t_exact(ds['S'],ds['T'],ds['p_from_z'],0) - 1000
-    
-    return ds
+    #== PS129 ==#
+    #print(eng.fieldnames(md_129))
+    eng.workspace['CTD_129'] = eng.load(filepaths['129'])
+    md_129 = eng.workspace['CTD_129']['HDR']
+    CTD_129 = eng.workspace['CTD_129']['DATA']    
+    CTD_129 = eng.table2struct(CTD_129,"ToScalar",True) # Simplicity
+    unpack_var = lambda var : [i[0] for i in eng.getfield(CTD_129, var)]
+    ds_129 = xr.Dataset(
+        data_vars=dict(
+            T=(
+                ["sensor","P"], 
+                [unpack_var('TEMP0'),unpack_var('TEMP1')],
+                {'units':'deg C'}
+            ),
+            S=(
+                ["sensor","P"], 
+                [unpack_var('SALP0'),unpack_var('SALP1')],
+                {'units':'PSU'}
+            ),
+        ),
+        coords=dict(
+            sensor=([0,1]),
+            P=(["P"], unpack_var('PRES'),{'units':'dbar'}),
+            datetime=pd.to_datetime(eng.getfield(md_129, 'DATETIME')),
+            lon=(eng.getfield(md_129, 'LON')),
+            lat=(eng.getfield(md_129, 'LAT')),
+        ),
+        attrs=dict(
+            description="CTD data for cruise PS129",
+            institute=(eng.getfield(md_129,'INSTITUTE')),
+            institute_country=(eng.getfield(md_129,'INST_COUNTRY')),
+            instrument=(eng.getfield(md_129,'INSTRUMENT')),
+            instrument_serial_number=(eng.getfield(md_129,'SN')),
+            ship=(eng.getfield(md_129,'SHIP')),
+            cruise=(eng.getfield(md_129,'CRUISE')),
+            station=(eng.getfield(md_129,'STATION ')),
+            water_depth=(str(eng.getfield(md_129,'WDEPTH'))),
+            ),
+    )
 
+    #== Combining ==# 
+    # Now that the datasets are created, we can combine them 
+    def make_vars(var):
+        var = [
+            ds_124[var].interp(P=ds_129['P']).values,
+            ds_129[var].mean(dim='sensor').values
+        ]   
+        return var 
+    def make_coords(coord):
+        return [ds_124[coord].values, ds_124[coord].values]
+    def make_attrs(attr):
+        return 'PS124: '+ds_124.attrs[attr]+' PS129: '+ds_129.attrs[attr]
+    ds = xr.Dataset(
+        data_vars=dict(
+            T = (["datetime", "P"], make_vars('T')),
+            S = (["datetime", "P"], make_vars('S')),
+        ),
+        coords=dict(
+            P = (["P"], ds_129['P'].values),
+            datetime = (["datetime"], make_coords('datetime')),
+            lon = (["datetime"], make_coords('lon')),
+            lat = (["datetime"], make_coords('lat')),
+        ),
+        attrs=dict(
+            description="CTD data for cruises PS124 and PS129",
+            institute=make_attrs('institute'),
+            institute_country=make_attrs('institute_country'),
+            instrument=make_attrs('instrument'),
+            instrument_serial_number=make_attrs('instrument_serial_number'),
+            ship=make_attrs('ship'),
+            cruise=make_attrs('cruise'),
+            station=make_attrs('station'),
+            water_depth=make_attrs('water_depth'),
+            ),
+    )
+
+    print("Completed opening the CTD data")
+    return ds 
 
 def open_mooring_data():
     """Opens the mooring .mat file(s) and converts into a mooring_ds 
@@ -325,4 +345,7 @@ if __name__=="__main__":
     
     ds = open_mooring_data()
     #ds.correct_mooring_salinities()
-    ds.fill_mooring()
+    #ds.fill_mooring()
+    #ds.convert_to_daily()
+    #ds.add_gsw_vars()
+    #ds = open_mooring_profiles_data()

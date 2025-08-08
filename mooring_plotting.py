@@ -480,39 +480,19 @@ def contents(ds, start_date, end_date, window=24, dt=False):
 
     plt.savefig(file_name,dpi=1200)
 
+def compare_CTD_cast_and_mooring():
+    
+
 if __name__=="__main__":   
-    ds = ma.open_mooring_ml_data(time_delta='2_hours')
-    ds = ma.correct_mooring_salinities(ds)
+    ds = ma.open_mooring_ml_data()
+    #ds = ma.correct_mooring_salinities(ds)
     #start_date, end_date = datetime(2021,4,1,0,0,0), datetime(2022,4,1,0,0,0)
     #mooring_TS(ds, start_date, end_date)
-    start_date, end_date = datetime(2021,9,6,0,0,0), datetime(2021,9,17,0,0,0)
-    for w in [  1,  3,  6, 12, 24, 48, 96,192,384]:
-        contents(ds, start_date, end_date, window=w, dt=True)
-    start_date, end_date = datetime(2021,8,1,0,0,0), datetime(2022,1,5,0,0,0)
-    for w in [  1,  3,  6, 12, 24, 48, 96,192,384]:
-        contents(ds, start_date, end_date, window=w, dt=False)
+    #start_date, end_date = datetime(2021,9,6,0,0,0), datetime(2021,9,17,0,0,0)
+    #for w in [  1,  3,  6, 12, 24, 48, 96,192,384]:
+    #    contents(ds, start_date, end_date, window=w, dt=True)
+    #start_date, end_date = datetime(2021,8,1,0,0,0), datetime(2022,1,5,0,0,0)
+    #for w in [  1,  3,  6, 12, 24, 48, 96,192,384]:
+    #    contents(ds, start_date, end_date, window=w, dt=False)
 
-    '''
-    #print(ma.fill_mooring_with_WOA(ds.sel(time=slice(datetime(2021,9,13,21),datetime(2021,9,14,3))).mean(dim='time')))
-
-    start_date, end_date = datetime(2021,4,1,0,0,0), datetime(2022,3,31,0,0,0)
-    vlines = [datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)]
-    plt_hovm(ds, 'T', start_date, end_date, vlines=vlines)
-    plt_hovm(ds, 'SA', start_date, end_date, vlines=vlines)
-    plt_hovm(ds, 'pot_rho', start_date, end_date, vlines=vlines)
-
-    start_date, end_date = datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)
-    patches = [((datetime(2021,9,13,21),-220), timedelta(hours=6), 170), ((datetime(2021,9,15,21),-220), timedelta(hours=6), 170)]
-    plt_hovm(ds, 'T', start_date, end_date, patches=patches)
-    plt_hovm(ds, 'SA', start_date, end_date, patches=patches)
-    plt_hovm(ds, 'pot_rho', start_date, end_date, patches=patches)
-
-    # EGU plot(s)
-    start_date, end_date = datetime(2021,4,1,0,0,0), datetime(2022,3,31,0,0,0)
-    vlines = [datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)]
-    plt_hovm_EGU(ds, start_date, end_date, vlines=vlines)
-    '''
-    #start_date, end_date = datetime(2021,9,10,0,0,0), datetime(2021,9,20,0,0,0)
-    #ds = ds.sel(time=slice(start_date,end_date))
-    #patches = [((datetime(2021,9,12,21),-220), timedelta(hours=6), 170), ((datetime(2021,9,15,21),-220), timedelta(hours=6), 170)]
-    #plt_hovm_EGU(ds, start_date, end_date, patches=patches)
+    compare_CTD_cast_and_mooring()
